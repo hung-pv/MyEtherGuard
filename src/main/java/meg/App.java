@@ -7,12 +7,12 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import javax.crypto.BadPaddingException;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.FileUtils;
@@ -20,19 +20,18 @@ import org.apache.commons.lang3.SystemUtils;
 
 import com.bitsofproof.supernode.wallet.BIP39;
 
+import meg.KeystoreManager.KeystoreContent;
 import meg.crypto.AES128;
 import meg.crypto.AES256;
 import meg.menu.MenuManager;
 
 public class App {
 
-	private static final int MAX_SIZE = 80;
 	private static final String FILE_IMG_EXT = "dll";
 	private static final String FILE_WALLET_EXT = "ocx";
 
 	private static final int MAX_IDIE_TIME_SEC = 60;
 
-	private static final File FILE_AES_KVP = getFileFromBase64("S0VFUF9USElTX1NBRkUuc3lz");
 	private static boolean holdon = false;
 
 	private static boolean debug;
@@ -69,7 +68,7 @@ public class App {
 		}
 		checkTimedOut();
 		MenuManager mm = new MenuManager();
-		if (!FILE_AES_KVP.exists()) {
+		if (!KeystoreManager.isKeystoreFileExists()) {
 			mm.add("RESTORE keystore", "restoreKeyStore");
 			mm.add("NEW keystore", "generateKeyStore");
 		} else {
@@ -105,8 +104,12 @@ public class App {
 		if (aes256Cipher != null) {
 			return;
 		}
+		if (!KeystoreManager.isKeystoreFileExists()) {
+			o("Keystore file named '%s' does not exists", KeystoreManager.getKeystoreFile().getName());
+			System.exit(1);
+		}
 		o("Loading keystore");
-		byte[] keyWithBIP39Encode = Base64.getDecoder().decode(FileUtils.readFileToString(FILE_AES_KVP, StandardCharsets.UTF_8));
+		byte[] keyWithBIP39Encode = KeystoreManager.getEncryptedKey();
 		String pwd = InputUtils.getPassword("Pass pharse:");
 		if (pwd == null) {
 			o("Cancelled");
@@ -115,7 +118,14 @@ public class App {
 
 		String mnemonic = BIP39.getMnemonic(keyWithBIP39Encode);
 		byte[] keyWithAES128 = BIP39.decode(mnemonic, pwd);
-		byte[] key = AES128.decrypt(keyWithAES128, pwd);
+		byte[] key;
+		try {
+			key = AES128.decrypt(keyWithAES128, pwd);
+		} catch (BadPaddingException e) {
+			o("Incorrect pass pharse");
+			System.exit(1);
+			return;
+		}
 		if (debug)
 			meg.StringUtils.printArray(key);
 		aes256Cipher = new AES256(key, pwd);
@@ -177,7 +187,9 @@ public class App {
 		}
 		
 		// Write file
-		FileUtils.write(FILE_AES_KVP, Base64.getEncoder().encodeToString(keyWithBIP39Encode), StandardCharsets.UTF_8);
+		KeystoreContent keystore = new KeystoreContent();
+		keystore.setEncryptedKey(keyWithBIP39Encode);
+		KeystoreManager.save(keystore);
 		
 		// Write MEMORIZE
 		saveChecksum(mnemonic, key, pwd);
@@ -239,8 +251,10 @@ public class App {
 			o("Hint: seed contains %d words", cacheSeedWordsLength);
 			return;
 		}
-		
-		FileUtils.write(FILE_AES_KVP, Base64.getEncoder().encodeToString(keyWithBIP39Encode), StandardCharsets.UTF_8);
+
+		KeystoreContent keystore = new KeystoreContent();
+		keystore.setEncryptedKey(keyWithBIP39Encode);
+		KeystoreManager.save(keystore);
 		o("Keystore restored successfully");
 
 		// Write MEMORIZE
@@ -277,10 +291,6 @@ public class App {
 	}
 
 	// Utils
-	private static File getFileFromBase64(String base64) {
-		return new File(new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8));
-	}
-
 	private static byte[] randomBytes(int size) throws NoSuchAlgorithmException {
 		byte[] bytes = new byte[size];
 		SecureRandom.getInstanceStrong().nextBytes(bytes);
@@ -291,7 +301,8 @@ public class App {
 	private static void checkUSB() {
 		USB usb = getUSB();
 		if (!usb.isValid()) {
-			o("USB not found");
+			o("USB not found !!!");
+			o("You may need a USB plugged in with an empty file named '%s' inside it", USB.USB_ID_FILE_NAME);
 			System.exit(1);
 		}
 	}

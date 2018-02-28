@@ -1,11 +1,13 @@
 package meg;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.Base64;
 
 public class USB {
 
-	private static final String USB_ID_FILE_NAME = "usb.4uth";
+	public static final String USB_ID_FILE_NAME = new String(Base64.getDecoder().decode("dXNiLjR1dGg="), StandardCharsets.UTF_8);
 	
 	private File drive;
 
