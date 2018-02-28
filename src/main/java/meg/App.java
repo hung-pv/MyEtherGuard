@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import javax.crypto.BadPaddingException;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.FileUtils;
@@ -23,6 +22,7 @@ import com.bitsofproof.supernode.wallet.BIP39;
 import meg.KeystoreManager.KeystoreContent;
 import meg.crypto.AES128;
 import meg.crypto.AES256;
+import meg.crypto.CryptoException;
 import meg.menu.MenuManager;
 
 public class App {
@@ -121,7 +121,7 @@ public class App {
 		byte[] key;
 		try {
 			key = AES128.decrypt(keyWithAES128, pwd);
-		} catch (BadPaddingException e) {
+		} catch (CryptoException e) {
 			o("Incorrect pass pharse");
 			System.exit(1);
 			return;

@@ -41,7 +41,11 @@ public class Option {
 			med.setAccessible(true);
 			med.invoke(null);
 		} catch (Exception e) {
-			throw new RuntimeException(e);
+			if (e instanceof NoSuchMethodException) {
+				System.err.println("Under construction !!!");
+			} else {
+				throw new RuntimeException(e);
+			}
 		}
 	}
 }
