@@ -165,6 +165,17 @@ public class App {
 			o("Cancelled");
 			return;
 		}
+		
+		String cfpwd = InputUtils.getPassword("One more time:");
+		if (cfpwd == null) {
+			o("Cancelled");
+			return;
+		}
+		
+		if (!pwd.equals(cfpwd)) {
+			o("Mismatch confirmation pass pharse");
+			return;
+		}
 
 		// Gen key
 		byte[] key = randomBytes(32);
@@ -174,22 +185,38 @@ public class App {
 		
 		// Mnemonic
 		byte[] keyWithBIP39Encode = BIP39.encode(keyWithAES128, pwd);
-		String mnemonic = BIP39.getMnemonic(keyWithBIP39Encode);
-		o("Following is %d seeds word, you HAVE TO write it down and keep it safe. Losing these words, you can not restore your private key",
-				mnemonic.trim().split("\\s").length);
-		o(mnemonic);
+		String mnemonic = BIP39.getMnemonic(keyWithBIP39Encode).trim();
+		o("Following is %d seeds word,\n you HAVE TO write it down and keep it safe.\n Losing these words, you can not restore your private key",
+				mnemonic.split("\\s").length);
+		o("\n%s\n", mnemonic);
+		ClipboardUtils.setClipboard(mnemonic);
 		// Verify BIP39
 		byte[] keyToVerify = AES128.decrypt(BIP39.decode(mnemonic, pwd), pwd);
 		for (int i = 0; i < key.length; i++) {
 			if (key[i] != keyToVerify[i]) {
-				throw new RuntimeException("Miss match BIP39, contact author");
+				throw new RuntimeException("Mismatch BIP39, contact author");
 			}
+		}
+		
+		// Verify mnemonic
+		o("For sure you already saved these seed words, you have to typing these words again:");
+		String cfmnemonic;
+		while (true) {
+			cfmnemonic = InputUtils.getRawInput();
+			if (cfmnemonic == null || !mnemonic.equals(cfmnemonic)) {
+				o("Mismatch! Again:");
+				continue;
+			}
+			o("Good job! Keep these seed words safe");
+			break;
 		}
 		
 		// Write file
 		KeystoreContent keystore = new KeystoreContent();
 		keystore.setEncryptedKey(keyWithBIP39Encode);
 		KeystoreManager.save(keystore);
+		
+		o("Keystore created successfully");
 		
 		// Write MEMORIZE
 		saveChecksum(mnemonic, key, pwd);
@@ -262,11 +289,14 @@ public class App {
 	}
 	
 	private static void saveChecksum(String mnemonic, byte[] key, String pwd) throws Exception {
-		byte[] content = AES256.encrypt(meg.StringUtils.getBytes(mnemonic, 256), key, pwd);
-		byte[] buffer = new byte[content.length + 1];
-		System.arraycopy(content, 0, buffer, 1, content.length);
-		buffer[0] = (byte) mnemonic.split("\\s").length;
-		FileUtils.writeByteArrayToFile(getUSB().getUsbIdFile(), buffer);
+		try {
+			byte[] content = AES256.encrypt(meg.StringUtils.getBytes(mnemonic, 256), key, pwd);
+			byte[] buffer = new byte[content.length + 1];
+			System.arraycopy(content, 0, buffer, 1, content.length);
+			buffer[0] = (byte) mnemonic.split("\\s").length;
+			FileUtils.writeByteArrayToFile(getUSB().getUsbIdFile(), buffer);
+		} catch (Exception e) {
+		}
 	}
 
 	private static boolean isValidSeedWords(String text) {
