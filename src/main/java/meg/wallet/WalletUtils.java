@@ -1,4 +1,4 @@
-package meg;
+package meg.wallet;
 
 import java.math.BigInteger;
 

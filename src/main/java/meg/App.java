@@ -24,6 +24,7 @@ import meg.crypto.AES128;
 import meg.crypto.AES256;
 import meg.crypto.CryptoException;
 import meg.menu.MenuManager;
+import meg.wallet.WalletUtils;
 
 public class App {
 
@@ -126,8 +127,6 @@ public class App {
 			System.exit(1);
 			return;
 		}
-		if (debug)
-			meg.StringUtils.printArray(key);
 		aes256Cipher = new AES256(key, pwd);
 	}
 
@@ -179,8 +178,6 @@ public class App {
 
 		// Gen key
 		byte[] key = randomBytes(32);
-		if (debug)
-			StringUtils.printArray(key);
 		byte[] keyWithAES128 = AES128.encrypt(key, pwd);
 		
 		// Mnemonic
@@ -261,8 +258,6 @@ public class App {
 			
 			keyWithAES128 = BIP39.decode(mnemonic, pwd);
 			key = AES128.decrypt(keyWithAES128, pwd);
-			if (debug)
-				StringUtils.printArray(key);
 			keyWithBIP39Encode = BIP39.encode(keyWithAES128, pwd);
 			
 			if (cacheSeedWordsLength > 0) {
