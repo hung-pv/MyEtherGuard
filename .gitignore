@@ -72,5 +72,6 @@ keystore
 *.sys
 
 /target/
+/logs/
 .project
 .classpath

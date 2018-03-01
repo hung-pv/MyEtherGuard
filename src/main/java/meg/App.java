@@ -72,7 +72,7 @@ public class App {
 			mm.add("RESTORE keystore", "restoreKeyStore");
 			mm.add("NEW keystore", "generateKeyStore");
 		} else {
-			mm.add("Save private key", "saveWalletPrivateKey", true);
+			mm.add("Save ERC20 (ethereum) private key", "saveERC20WalletPrivateKey", true);
 			mm.add("Get private key", "getWalletPrivateKey", true);
 			mm.add("Save screen shot", "saveScreenShot", true);
 			mm.add("Show screen shot", "showScreenShot", true);
@@ -275,6 +275,21 @@ public class App {
 		text = text.trim();
 		String[] words = text.split("\\s");
 		return words.length % 2 == 0;
+	}
+	
+	@SuppressWarnings("unused")
+	private static void saveERC20WalletPrivateKey() throws Exception {
+		o("Enter your ERC20 private key:");
+		String privateKey = InputUtils.getInput(64);
+		if (privateKey == null) {
+			o("Cancelled");
+			return;
+		}
+		byte[] bprivateKey = privateKey.getBytes(StandardCharsets.UTF_8);
+		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encrypt(bprivateKey);
+		String address = WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey);
+		FileUtils.writeByteArrayToFile(getUSB().getFileInUsb(String.format("%s.%s", address, FILE_WALLET_EXT)), privateKeyWithAES256Encrypted);
+		o("Saved %s", address);
 	}
 
 	private static int getMenuSelection() {
