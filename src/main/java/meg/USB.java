@@ -19,6 +19,10 @@ public class USB {
 		return this.drive == null ? null : Paths.get(this.drive.getAbsolutePath(), path).toFile();
 	}
 	
+	public File[] getFilesInUsb() {
+		return this.drive == null ? null : this.drive.listFiles();
+	}
+	
 	public boolean isValid() {
 		return this.drive != null && this.drive.exists() && this.drive.isDirectory() && this.getUsbIdFile().exists();
 	}

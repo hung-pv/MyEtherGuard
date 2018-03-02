@@ -1,7 +1,7 @@
 package meg.wallet;
 
 public enum WalletType {
-	ERC20("Ethereum (ERC20 tokens)"), Bitcoin("Bitcoin based");
+	ERC20("Ethereum (and ERC20 tokens)"), BIT("Bitcoin based"), Other("Other");
 	
 	private String displayText;
 	

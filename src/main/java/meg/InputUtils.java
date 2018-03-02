@@ -29,6 +29,7 @@ public class InputUtils {
 	
 	public static boolean confirm(String msg) {
 		o(msg);
+		o("Y/N");
 		return "y".equalsIgnoreCase(getInput(1));
 	}
 

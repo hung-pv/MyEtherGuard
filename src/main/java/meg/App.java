@@ -1,11 +1,13 @@
 package meg;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.Security;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
@@ -24,6 +26,8 @@ import meg.crypto.AES128;
 import meg.crypto.AES256;
 import meg.crypto.CryptoException;
 import meg.menu.MenuManager;
+import meg.wallet.WalletInfo;
+import meg.wallet.WalletType;
 import meg.wallet.WalletUtils;
 
 public class App {
@@ -73,12 +77,13 @@ public class App {
 			mm.add("RESTORE keystore", "restoreKeyStore");
 			mm.add("NEW keystore", "generateKeyStore");
 		} else {
-			mm.add("Save ERC20 (ethereum) private key", "saveERC20WalletPrivateKey", true);
-			mm.add("Get private key", "getWalletPrivateKey", true);
+			mm.add("Save wallet private key", "saveWalletPrivateKey", true);
+			mm.add("Get wallet private key", "getWalletPrivateKey", true);
 			mm.add("Save screen shot", "saveScreenShot", true);
 			mm.add("Show screen shot", "showScreenShot", true);
 		}
-		mm.showOptionList("Choose an action:");
+		mm.add("Exit", "exit");
+		mm.showOptionList("\n\n==========\n\nChoose an action:");
 		int selection = getMenuSelection();
 		if (selection < 1) {
 			o("Invalid option");
@@ -128,6 +133,12 @@ public class App {
 			return;
 		}
 		aes256Cipher = new AES256(key, pwd);
+	}
+	
+	@SuppressWarnings("unused")
+	private static void exit() {
+		o("Thanks for using our production");
+		System.exit(0);
 	}
 
 	private static void o(String pattern, Object... params) {
@@ -303,8 +314,22 @@ public class App {
 	}
 	
 	@SuppressWarnings("unused")
-	private static void saveERC20WalletPrivateKey() throws Exception {
-		o("Enter your ERC20 private key:");
+	private static void saveWalletPrivateKey() throws Exception {
+		MenuManager mm = new MenuManager();
+		for (WalletType wt : WalletType.values()) {
+			mm.add(wt.getDisplayText(), null);
+		}
+		mm.showOptionList("Select wallet type:");
+		int selection = getMenuSelection();
+		if (selection < 1 || selection > WalletType.values().length) {
+			o("Invalid option");
+			start();
+			return;
+		}
+		
+		WalletType wt = WalletType.values()[selection - 1];
+		
+		o("Enter your private key:");
 		String privateKey = InputUtils.getInput(64);
 		if (privateKey == null) {
 			o("Cancelled");
@@ -312,9 +337,71 @@ public class App {
 		}
 		byte[] bprivateKey = privateKey.getBytes(StandardCharsets.UTF_8);
 		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encrypt(bprivateKey);
-		String address = WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey);
-		FileUtils.writeByteArrayToFile(getUSB().getFileInUsb(String.format("%s.%s", address, FILE_WALLET_EXT)), privateKeyWithAES256Encrypted);
+		
+		String address;
+		if (wt == WalletType.ERC20) {
+			address = WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey);
+		} else {
+			o("Address:");
+			while (true) {
+				address = InputUtils.getInput(68);
+				if (InputUtils.confirm("You sure? Please confirm this address again!")) {
+					break;
+				}
+				o("Address:");
+			}
+		}
+		
+		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted);
+		File file = getUSB().getFileInUsb(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
+		try {
+			UniqueFileUtils.write(file, wi.toString());
+		} catch (FileExistsException e) {
+			o("** This wallet is already exists in your device, named '%s'", file.getName());
+			o(">> Aborted");
+			return;
+		}
+		
 		o("Saved %s", address);
+	}
+	
+	@SuppressWarnings("unused")
+	private static void getWalletPrivateKey() throws Exception {
+		USB usb = getUSB();
+		File[] files = usb.getFilesInUsb();
+		if (files == null || files.length == 0) {
+			o("No wallet existing in device");
+			return;
+		}
+		MenuManager mm = new MenuManager();
+		List<File> wallets = new ArrayList<>();
+		for (File file : files) {
+			if (!file.isFile()) continue;
+			String name = file.getName();
+			if (name.toLowerCase().endsWith("." + FILE_WALLET_EXT.toLowerCase())) {
+				mm.add(name.split("\\.")[0], null);
+				wallets.add(file);
+			}
+		}
+		if (wallets.isEmpty()) {
+			o("No wallet existing in device");
+			return;
+		}
+		mm.showOptionList("Select a wallet:");
+		int selection = getMenuSelection();
+		if (selection < 1 || selection > wallets.size()) {
+			o("Invalid selection");
+			return;
+		}
+		File wallet = wallets.get(selection - 1);
+		WalletInfo wi = WalletUtils.readWalletInfo(wallet);
+		byte[] keyBytes = aes256Cipher.decrypt(wi.getPrivateKeyEncrypted());
+		String privateKey = new String(keyBytes, StandardCharsets.UTF_8);
+		o("Address:");
+		o(wi.getAddress());
+		o("Private key:");
+		o(privateKey);
+		ClipboardUtils.setClipboard(privateKey);
 	}
 
 	private static int getMenuSelection() {
