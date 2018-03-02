@@ -45,6 +45,20 @@ public class InputUtils {
 		} while (input == null);
 		return input;
 	}
+	
+	public static int getInt() {
+		String input;
+		while(true) {
+			input = org.apache.commons.lang3.StringUtils.trimToNull(getRawInput());
+			try {
+				return Integer.parseInt(input);
+			} catch (Exception e) {
+				o("Invalid number!");
+				o("Try again:");
+				continue;
+			}
+		}
+	}
 
 	private static void o(String pattern, Object... params) {
 		System.out.println(String.format(pattern, params));

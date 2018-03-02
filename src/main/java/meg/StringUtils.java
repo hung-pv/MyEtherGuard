@@ -38,4 +38,28 @@ public class StringUtils {
 			System.out.println("ERR");
 		}
 	}
+	
+	public static String beautiNumber(String number) {
+		String natural, decimal;
+		if (number.contains(".")) {
+			natural = number.substring(0, number.indexOf("."));
+			decimal = number.substring(number.indexOf("."));
+		} else {
+			natural = number;
+			decimal = "";
+		}
+		
+		char[] reverse = org.apache.commons.lang3.StringUtils.reverse(natural).toCharArray();
+		StringBuilder sb = new StringBuilder();
+		int counter = 0;
+		for (char digit : reverse) {
+			sb.append(digit);
+			if (counter%3 == 2) {
+				sb.append(',');
+			}
+			counter++;
+		}
+		
+		return org.apache.commons.lang3.StringUtils.reverse(sb.toString()) + decimal;
+	}
 }
