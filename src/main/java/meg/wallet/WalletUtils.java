@@ -17,17 +17,32 @@ public class WalletUtils {
 	}
 
 	public static byte[] getEthAddressFromPrivateKey(String privateKey) {
-        BigInteger pk = new BigInteger(privateKey, 16);
-        ECKey key = ECKey.fromPrivate(pk);
-        return key.getAddress();
+        return getECKey(privateKey).getAddress();
+	}
+	
+	public static ECKey getECKey(String privateKey) {
+		return ECKey.fromPrivate(new BigInteger(privateKey, 16));
 	}
 	
 	public static WalletInfo readWalletInfo(File file) throws IOException {
 		List<String> lines = FileUtils.readLines(file, StandardCharsets.UTF_8);
-		if (lines.size() < 3) {
+		if (lines.size() < 5) {
 			throw new IOException("Invalid format of wallet file " + file.getName());
 		}
-		WalletInfo wi = new WalletInfo(lines.get(0), lines.get(1), Base64.getDecoder().decode(lines.get(2)));
+		
+		String mnemoticInfo = lines.get(3);
+		byte[] mnemoticEncrypted = null;
+		if (!mnemoticInfo.trim().startsWith("(")) {
+			mnemoticEncrypted = Base64.getDecoder().decode(mnemoticInfo.trim());
+		}
+		
+		String noteInfo = lines.get(4);
+		byte[] noteEncrypted = null;
+		if (!noteInfo.trim().startsWith("(")) {
+			noteEncrypted = Base64.getDecoder().decode(noteInfo.trim());
+		}
+		
+		WalletInfo wi = new WalletInfo(lines.get(0), lines.get(1), Base64.getDecoder().decode(lines.get(2)), mnemoticEncrypted, noteEncrypted);
 		return wi;
 	}
 }

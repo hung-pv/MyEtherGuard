@@ -1,7 +1,6 @@
 package meg;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
@@ -18,6 +17,10 @@ import javax.imageio.ImageIO;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.SystemUtils;
+import org.ethereum.core.Transaction;
+import org.ethereum.crypto.ECKey;
+import org.spongycastle.util.BigIntegers;
+import org.spongycastle.util.encoders.Hex;
 
 import com.bitsofproof.supernode.wallet.BIP39;
 
@@ -40,7 +43,7 @@ public class App {
 	private static boolean holdon = false;
 
 	private static boolean debug;
-	
+
 	private static AES256 aes256Cipher = null;
 
 	public static void main(String[] args) throws IllegalAccessException, IllegalArgumentException,
@@ -79,6 +82,7 @@ public class App {
 		} else {
 			mm.add("Save wallet private key", "saveWalletPrivateKey", true);
 			mm.add("Get wallet private key", "getWalletPrivateKey", true);
+			mm.add("Sign transaction", "signTransaction", true);
 			mm.add("Save screen shot", "saveScreenShot", true);
 			mm.add("Show screen shot", "showScreenShot", true);
 		}
@@ -96,7 +100,7 @@ public class App {
 		} catch (RuntimeException e) {
 			Throwable caused = e.getCause();
 			if (caused instanceof InvocationTargetException) {
-				throw (Exception)caused.getCause();
+				throw (Exception) caused.getCause();
 			} else {
 				throw e;
 			}
@@ -104,7 +108,7 @@ public class App {
 
 		start();
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void loadKeystore() throws Exception {
 		if (aes256Cipher != null) {
@@ -134,7 +138,7 @@ public class App {
 		}
 		aes256Cipher = new AES256(key, pwd);
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void exit() {
 		o("Thanks for using our production");
@@ -163,25 +167,26 @@ public class App {
 		USB usb = getUSB();
 		File fUsbId = usb.getUsbIdFile();
 		if (!debug && fUsbId.exists() && FileUtils.readFileToByteArray(fUsbId).length > 0) {
-			o("WARNING! Your USB '%s' were used by another keystore before, restoring keystore may results losting encrypted data FOREVER", usb.getAbsolutePath());
+			o("WARNING! Your USB '%s' were used by another keystore before, restoring keystore may results losting encrypted data FOREVER",
+					usb.getAbsolutePath());
 			o("In order to generate new keystore you need to perform following actions:");
 			o(" 1. Delete '%s' file located in USB", fUsbId.getName());
 			o(" 2. Create a new '%s' file in your USB, but leave it empty", fUsbId.getName());
 			return;
 		}
-		
+
 		String pwd = InputUtils.getPassword("Pass pharse (up to 16 chars):");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
 		}
-		
+
 		String cfpwd = InputUtils.getPassword("One more time:");
 		if (cfpwd == null) {
 			o("Cancelled");
 			return;
 		}
-		
+
 		if (!pwd.equals(cfpwd)) {
 			o("Mismatch confirmation pass pharse");
 			return;
@@ -190,14 +195,14 @@ public class App {
 		// Gen key
 		byte[] key = randomBytes(32);
 		byte[] keyWithAES128 = AES128.encrypt(key, pwd);
-		
+
 		// Mnemonic
 		byte[] keyWithBIP39Encode = BIP39.encode(keyWithAES128, pwd);
 		String mnemonic = BIP39.getMnemonic(keyWithBIP39Encode).trim();
 		o("Following is %d seeds word,\n you HAVE TO write it down and keep it safe.\n Losing these words, you can not restore your private key",
 				mnemonic.split("\\s").length);
 		o("\n%s\n", mnemonic);
-		ClipboardUtils.setClipboard(mnemonic);
+		ClipboardUtils.setClipboard(mnemonic, "Mnemonic");
 		// Verify BIP39
 		byte[] keyToVerify = AES128.decrypt(BIP39.decode(mnemonic, pwd), pwd);
 		for (int i = 0; i < key.length; i++) {
@@ -205,7 +210,7 @@ public class App {
 				throw new RuntimeException("Mismatch BIP39, contact author");
 			}
 		}
-		
+
 		// Verify mnemonic
 		o("For sure you already saved these seed words, you have to typing these words again:");
 		String cfmnemonic;
@@ -218,18 +223,18 @@ public class App {
 			o("Good job! Keep these seed words safe");
 			break;
 		}
-		
+
 		// Write file
 		KeystoreContent keystore = new KeystoreContent();
 		keystore.setEncryptedKey(keyWithBIP39Encode);
 		KeystoreManager.save(keystore);
-		
+
 		o("Keystore created successfully");
-		
+
 		// Write MEMORIZE
 		saveChecksum(mnemonic, key, pwd);
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void restoreKeyStore() throws Exception {
 		USB usb = getUSB();
@@ -247,16 +252,16 @@ public class App {
 				return;
 			}
 		} while (!isValidSeedWords(mnemonic));
-		
+
 		String pwd = InputUtils.getPassword("Pass pharse (up to 16 chars):");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
 		}
-		
+
 		byte[] keyWithAES128, key, keyWithBIP39Encode, usbIdContentBuffer, usbIdContent;
 		int cacheSeedWordsLength = 0;
-		
+
 		try {
 			usbIdContentBuffer = FileUtils.readFileToByteArray(usb.getUsbIdFile());
 			if (usbIdContentBuffer.length > 1) {
@@ -266,11 +271,11 @@ public class App {
 			} else {
 				usbIdContent = new byte[0];
 			}
-			
+
 			keyWithAES128 = BIP39.decode(mnemonic, pwd);
 			key = AES128.decrypt(keyWithAES128, pwd);
 			keyWithBIP39Encode = BIP39.encode(keyWithAES128, pwd);
-			
+
 			if (cacheSeedWordsLength > 0) {
 				String mnemonicFromUsbID = new String(AES256.decrypt(usbIdContent, key, pwd), StandardCharsets.UTF_8);
 				if (!mnemonic.trim().equals(mnemonicFromUsbID.trim())) {
@@ -293,7 +298,7 @@ public class App {
 		// Write MEMORIZE
 		saveChecksum(mnemonic, key, pwd);
 	}
-	
+
 	private static void saveChecksum(String mnemonic, byte[] key, String pwd) throws Exception {
 		try {
 			byte[] content = AES256.encrypt(meg.StringUtils.getBytes(mnemonic, 256), key, pwd);
@@ -312,7 +317,7 @@ public class App {
 		String[] words = text.split("\\s");
 		return words.length % 2 == 0;
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void saveWalletPrivateKey() throws Exception {
 		MenuManager mm = new MenuManager();
@@ -326,9 +331,9 @@ public class App {
 			start();
 			return;
 		}
-		
+
 		WalletType wt = WalletType.values()[selection - 1];
-		
+
 		o("Enter your private key:");
 		String privateKey = InputUtils.getInput(64);
 		if (privateKey == null) {
@@ -338,6 +343,19 @@ public class App {
 		byte[] bprivateKey = privateKey.getBytes(StandardCharsets.UTF_8);
 		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encrypt(bprivateKey);
 		
+		o("Enter your mnemotic:");
+		o("(press Enter to skip)");
+		String mnemotic = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
+		if (mnemotic != null) {
+			if (mnemotic.split("\\s").length % 12 != 0) {
+				o("Mnemotic incorrect (can not devided by 12)");
+				o("Aborted");
+				return;
+			}
+		}
+		byte[] bmnemotic = mnemotic == null ? null : mnemotic.getBytes(StandardCharsets.UTF_8);
+		byte[] mnemoticWithAES256Encrypted = bmnemotic == null ? null : aes256Cipher.encrypt(bmnemotic);
+
 		String address;
 		if (wt == WalletType.ERC20) {
 			address = WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey);
@@ -352,7 +370,13 @@ public class App {
 			}
 		}
 		
-		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted);
+		o("Note - this content can NOT be changed later:");
+		o("(press Enter to skip)");
+		String note = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
+		byte[] bnote = note == null ? null : note.getBytes(StandardCharsets.UTF_8);
+		byte[] noteWithAES256Encrypted = bnote == null ? null : aes256Cipher.encrypt(bnote);
+
+		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted, mnemoticWithAES256Encrypted, noteWithAES256Encrypted);
 		File file = getUSB().getFileInUsb(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
 		try {
 			UniqueFileUtils.write(file, wi.toString());
@@ -361,10 +385,10 @@ public class App {
 			o(">> Aborted");
 			return;
 		}
-		
+
 		o("Saved %s", address);
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void getWalletPrivateKey() throws Exception {
 		USB usb = getUSB();
@@ -376,7 +400,8 @@ public class App {
 		MenuManager mm = new MenuManager();
 		List<File> wallets = new ArrayList<>();
 		for (File file : files) {
-			if (!file.isFile()) continue;
+			if (!file.isFile())
+				continue;
 			String name = file.getName();
 			if (name.toLowerCase().endsWith("." + FILE_WALLET_EXT.toLowerCase())) {
 				mm.add(name.split("\\.")[0], null);
@@ -398,10 +423,56 @@ public class App {
 		byte[] keyBytes = aes256Cipher.decrypt(wi.getPrivateKeyEncrypted());
 		String privateKey = new String(keyBytes, StandardCharsets.UTF_8);
 		o("Address:");
-		o(wi.getAddress());
+		o("\t%s", wi.getAddress());
 		o("Private key:");
-		o(privateKey);
-		ClipboardUtils.setClipboard(privateKey);
+		o("\t%s", privateKey);
+		
+		if (wi.getMnemoticEncrypted() != null) {
+			byte[] mnemoticBytes = aes256Cipher.decrypt(wi.getMnemoticEncrypted());
+			String mnemotic = new String(mnemoticBytes, StandardCharsets.UTF_8);
+			o("Mnemotic:");
+			o("\t%s", mnemotic);
+			ClipboardUtils.setClipboard(mnemotic, "Mnemotic");
+		} else {
+			ClipboardUtils.setClipboard(privateKey, "Private key");
+		}
+
+		if (wi.getNoteEncrypted() != null) {
+			byte[] noteBytes = aes256Cipher.decrypt(wi.getNoteEncrypted());
+			String note = new String(noteBytes, StandardCharsets.UTF_8);
+			o("Note:");
+			o("\t%s", note);
+		}
+	}
+
+	@SuppressWarnings("unused")
+	private static void signTransaction() throws Exception {
+		byte[] nonce, gasPrice, gasLimit, receiveAddress, value, data;
+		nonce = Hex.decode("");
+		gasPrice = Hex.decode("");
+		gasLimit = Hex.decode("");
+		receiveAddress = Hex.decode("");
+		value = Hex.decode("");
+		data = null;
+		Integer chainId = new Integer(1);
+
+		Transaction tx = new Transaction(nonce, gasPrice, gasLimit, receiveAddress, value, data, chainId);
+		String privateKey = "";
+		tx.sign(WalletUtils.getECKey(privateKey));
+
+		System.out.println("v\t\t\t: " + Hex.toHexString(new byte[] { tx.getSignature().v }));
+		System.out.println("r\t\t\t: " + Hex.toHexString(BigIntegers.asUnsignedByteArray(tx.getSignature().r)));
+		System.out.println("s\t\t\t: " + Hex.toHexString(BigIntegers.asUnsignedByteArray(tx.getSignature().s)));
+
+		ECKey key = ECKey.signatureToKey(tx.getHash(), tx.getSignature().toBase64());
+
+		System.out.println("Tx unsigned RLP\t\t: " + Hex.toHexString(tx.getEncodedRaw()));
+		System.out.println("**Tx signed RLP\t\t: " + Hex.toHexString(tx.getEncoded()));
+
+		System.out.println("Signature public key\t: " + Hex.toHexString(key.getPubKey()));
+		System.out.println("Sender is\t\t: " + Hex.toHexString(key.getAddress()));
+
+		System.out.println(tx.toString());
 	}
 
 	private static int getMenuSelection() {
@@ -435,6 +506,7 @@ public class App {
 	}
 
 	private static USB _usb = new USB(null);
+
 	private static USB getUSB() {
 		if (!SystemUtils.IS_OS_WINDOWS) {
 			throw new RuntimeException(

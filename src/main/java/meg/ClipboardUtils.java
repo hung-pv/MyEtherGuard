@@ -5,7 +5,7 @@ import java.awt.datatransfer.StringSelection;
 
 public class ClipboardUtils {
 
-	public static void setClipboard(String text) {
+	public static void setClipboard(String text, String name) {
 		try {
 			Toolkit.getDefaultToolkit()
 	        .getSystemClipboard()
@@ -13,7 +13,10 @@ public class ClipboardUtils {
 	                new StringSelection(text),
 	                null
 	        );
-			System.out.println("(Copied to clipboard)");
+			if (name == null)
+				System.out.println("(Copied to clipboard)");
+			else
+				System.out.println(String.format("(%s was copied to clipboard)", name));
 		} catch (Exception e) {
 		}
 	}
