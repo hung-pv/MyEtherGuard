@@ -2,20 +2,26 @@ package meg.wallet;
 
 import java.util.Base64;
 
+import meg.UncompletedFile;
+
 public class WalletInfo {
 
 	private String type;
 	private String address;
 	private byte[] privateKeyEncrypted;
-	private byte[] mnemoticEncrypted;
+	private byte[] mnemonicEncrypted;
 	private byte[] noteEncrypted;
+	
+	private WalletInfo() {
+		
+	}
 
-	public WalletInfo(String type, String address, byte[] privateKeyEncrypted, byte[] mnemoticEncrypted,
+	public WalletInfo(String type, String address, byte[] privateKeyEncrypted, byte[] mnemonicEncrypted,
 			byte[] noteEncrypted) {
 		this.type = type;
 		this.address = address;
 		this.privateKeyEncrypted = privateKeyEncrypted;
-		this.mnemoticEncrypted = mnemoticEncrypted;
+		this.mnemonicEncrypted = mnemonicEncrypted;
 		this.noteEncrypted = noteEncrypted;
 	}
 
@@ -23,51 +29,51 @@ public class WalletInfo {
 		return type;
 	}
 
-	public void setType(String type) {
-		this.type = type;
-	}
-
 	public String getAddress() {
 		return address;
-	}
-
-	public void setAddress(String address) {
-		this.address = address;
 	}
 
 	public byte[] getPrivateKeyEncrypted() {
 		return privateKeyEncrypted;
 	}
 
-	public void setPrivateKeyEncrypted(byte[] privateKeyEncrypted) {
-		this.privateKeyEncrypted = privateKeyEncrypted;
-	}
-
-	public byte[] getMnemoticEncrypted() {
-		return mnemoticEncrypted;
-	}
-
-	public void setMnemoticEncrypted(byte[] mnemoticEncrypted) {
-		this.mnemoticEncrypted = mnemoticEncrypted;
+	public byte[] getMnemonicEncrypted() {
+		return mnemonicEncrypted;
 	}
 
 	public byte[] getNoteEncrypted() {
 		return noteEncrypted;
 	}
-
-	public void setNoteEncrypted(byte[] noteEncrypted) {
-		this.noteEncrypted = noteEncrypted;
+	
+	public boolean containsPrivateKey() {
+		return this.privateKeyEncrypted != null;
 	}
-
-	@Override
-	public String toString() {
-		return (this.type == null ? "other" : this.type) + "\n" + //
-				this.address + "\n" + //
-				Base64.getEncoder().encodeToString(this.privateKeyEncrypted) + "\n" + //
-				(this.mnemoticEncrypted == null ? "(no mnemotic)"
-						: Base64.getEncoder().encodeToString(this.mnemoticEncrypted))
-				+ "\n" + //
-				(this.noteEncrypted == null ? "(no note)"
-						: Base64.getEncoder().encodeToString(this.noteEncrypted));
+	
+	public boolean containsMnemonic() {
+		return this.mnemonicEncrypted != null;
+	}
+	
+	public boolean containsNote() {
+		return this.noteEncrypted != null;
+	}
+	
+	public byte[] toRaw() {
+		UncompletedFile uf = new UncompletedFile();
+		uf.append(this.type);
+		uf.append(this.address);
+		uf.append(this.privateKeyEncrypted == null ? null : Base64.getEncoder().encodeToString(this.privateKeyEncrypted));
+		uf.append(this.mnemonicEncrypted == null ? null : Base64.getEncoder().encodeToString(this.mnemonicEncrypted));
+		uf.append(this.noteEncrypted == null ? null : Base64.getEncoder().encodeToString(this.noteEncrypted));
+		return uf.toRaw();
+	}
+	
+	public static WalletInfo fromUncompletedFile(UncompletedFile file) {
+		WalletInfo result = new WalletInfo();
+		result.type = file.getLine(0);
+		result.address = file.getLine(1);
+		result.privateKeyEncrypted = file.getLine(2) == null ? null : Base64.getDecoder().decode(file.getLine(2));
+		result.mnemonicEncrypted = file.getLine(3) == null ? null : Base64.getDecoder().decode(file.getLine(3));
+		result.noteEncrypted = file.getLine(4) == null ? null : Base64.getDecoder().decode(file.getLine(4));
+		return result;
 	}
 }

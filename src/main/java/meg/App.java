@@ -82,7 +82,7 @@ public class App {
 		} else {
 			mm.add("Save wallet private key", "saveWalletPrivateKey", true);
 			mm.add("Get wallet private key", "getWalletPrivateKey", true);
-			mm.add("Sign transaction", "signTransaction", true);
+			mm.add("Sign transaction (currently supports ERC20 only)", "signTransaction", true);
 			mm.add("Save screen shot", "saveScreenShot", true);
 			mm.add("Show screen shot", "showScreenShot", true);
 		}
@@ -335,29 +335,31 @@ public class App {
 		WalletType wt = WalletType.values()[selection - 1];
 
 		o("Enter your private key:");
-		String privateKey = InputUtils.getInput(64);
-		if (privateKey == null) {
-			o("Cancelled");
-			return;
-		}
-		byte[] bprivateKey = privateKey.getBytes(StandardCharsets.UTF_8);
-		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encrypt(bprivateKey);
-		
-		o("Enter your mnemotic:");
 		o("(press Enter to skip)");
-		String mnemotic = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
-		if (mnemotic != null) {
-			if (mnemotic.split("\\s").length % 12 != 0) {
-				o("Mnemotic incorrect (can not devided by 12)");
+		String privateKey = InputUtils.getInput(64);
+		byte[] bprivateKey = meg.StringUtils.getBytesNullable(privateKey);
+		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encryptNullable(bprivateKey);
+		
+		o("Enter your mnemonic:");
+		o("(press Enter to skip)");
+		String mnemonic = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
+		if (mnemonic != null) {
+			if (mnemonic.split("\\s").length % 12 != 0) {
+				o("Mnemonic incorrect (can not devided by 12)");
 				o("Aborted");
 				return;
 			}
 		}
-		byte[] bmnemotic = mnemotic == null ? null : mnemotic.getBytes(StandardCharsets.UTF_8);
-		byte[] mnemoticWithAES256Encrypted = bmnemotic == null ? null : aes256Cipher.encrypt(bmnemotic);
+		byte[] bmnemonic = meg.StringUtils.getBytesNullable(mnemonic);
+		byte[] mnemonicWithAES256Encrypted = aes256Cipher.encryptNullable(bmnemonic);
+		
+		if (privateKey == null && mnemonic == null) {
+			o("You must provide at least one information, Private Key or Mnemonic seed words");
+			return;
+		}
 
 		String address;
-		if (wt == WalletType.ERC20) {
+		if (wt == WalletType.ERC20 && privateKey != null) {
 			address = WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey);
 		} else {
 			o("Address:");
@@ -373,13 +375,13 @@ public class App {
 		o("Note - this content can NOT be changed later:");
 		o("(press Enter to skip)");
 		String note = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
-		byte[] bnote = note == null ? null : note.getBytes(StandardCharsets.UTF_8);
-		byte[] noteWithAES256Encrypted = bnote == null ? null : aes256Cipher.encrypt(bnote);
+		byte[] bnote = meg.StringUtils.getBytesNullable(note);
+		byte[] noteWithAES256Encrypted = aes256Cipher.encryptNullable(bnote);
 
-		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted, mnemoticWithAES256Encrypted, noteWithAES256Encrypted);
+		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted, mnemonicWithAES256Encrypted, noteWithAES256Encrypted);
 		File file = getUSB().getFileInUsb(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
 		try {
-			UniqueFileUtils.write(file, wi.toString());
+			UniqueFileUtils.write(file, wi.toRaw());
 		} catch (FileExistsException e) {
 			o("** This wallet is already exists in your device, named '%s'", file.getName());
 			o(">> Aborted");
@@ -420,24 +422,32 @@ public class App {
 		}
 		File wallet = wallets.get(selection - 1);
 		WalletInfo wi = WalletUtils.readWalletInfo(wallet);
-		byte[] keyBytes = aes256Cipher.decrypt(wi.getPrivateKeyEncrypted());
-		String privateKey = new String(keyBytes, StandardCharsets.UTF_8);
 		o("Address:");
 		o("\t%s", wi.getAddress());
-		o("Private key:");
-		o("\t%s", privateKey);
 		
-		if (wi.getMnemoticEncrypted() != null) {
-			byte[] mnemoticBytes = aes256Cipher.decrypt(wi.getMnemoticEncrypted());
-			String mnemotic = new String(mnemoticBytes, StandardCharsets.UTF_8);
-			o("Mnemotic:");
-			o("\t%s", mnemotic);
-			ClipboardUtils.setClipboard(mnemotic, "Mnemotic");
-		} else {
+		String privateKey = null, mnemonic = null;
+		
+		if (wi.containsPrivateKey()) {
+			byte[] keyBytes = aes256Cipher.decrypt(wi.getPrivateKeyEncrypted());
+			privateKey = new String(keyBytes, StandardCharsets.UTF_8);
+			o("Private key:");
+			o("\t%s", privateKey);
+		}
+		
+		if (wi.containsMnemonic()) {
+			byte[] mnemonicBytes = aes256Cipher.decrypt(wi.getMnemonicEncrypted());
+			mnemonic = new String(mnemonicBytes, StandardCharsets.UTF_8);
+			o("Mnemonic:");
+			o("\t%s", mnemonic);
+		}
+		
+		if (wi.containsMnemonic()) {
+			ClipboardUtils.setClipboard(mnemonic, "Mnemonic");
+		} else if (wi.containsPrivateKey()) {
 			ClipboardUtils.setClipboard(privateKey, "Private key");
 		}
 
-		if (wi.getNoteEncrypted() != null) {
+		if (wi.containsNote()) {
 			byte[] noteBytes = aes256Cipher.decrypt(wi.getNoteEncrypted());
 			String note = new String(noteBytes, StandardCharsets.UTF_8);
 			o("Note:");

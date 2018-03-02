@@ -6,6 +6,9 @@ import java.awt.datatransfer.StringSelection;
 public class ClipboardUtils {
 
 	public static void setClipboard(String text, String name) {
+		if (text == null) {
+			text = "";
+		}
 		try {
 			Toolkit.getDefaultToolkit()
 	        .getSystemClipboard()
@@ -13,7 +16,9 @@ public class ClipboardUtils {
 	                new StringSelection(text),
 	                null
 	        );
-			if (name == null)
+			if (text.equals("")) {
+				System.out.println("Clipboard cleared");
+			} else if (name == null)
 				System.out.println("(Copied to clipboard)");
 			else
 				System.out.println(String.format("(%s was copied to clipboard)", name));

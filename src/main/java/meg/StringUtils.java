@@ -9,6 +9,11 @@ public class StringUtils {
 	public static byte[] getBytes(String text, int size) {
 		return getBytes(text, size, StandardCharsets.UTF_8);
 	}
+
+	public static byte[] getBytesNullable(String text) {
+		if (text == null) return null;
+		return text.getBytes(StandardCharsets.UTF_8);
+	}
 	
 	public static byte[] getBytes(String text, int size, Charset c) {
 		byte[] barr = text.getBytes(c);

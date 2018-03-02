@@ -56,7 +56,17 @@ public class AES256 {
 		return AES256.process(data, this.key, this.iv, true);
 	}
 	
+	public byte[] encryptNullable(byte[] data) {
+		if (data == null) return null;
+		return encrypt(data);
+	}
+	
 	public byte[] decrypt(byte[] data) {
 		return AES256.process(data, this.key, this.iv, false);
+	}
+	
+	public byte[] decryptNullable(byte[] data) {
+		if (data == null) return null;
+		return decrypt(data);
 	}
 }
