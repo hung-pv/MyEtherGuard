@@ -75,3 +75,4 @@ keystore
 /logs/
 .project
 .classpath
+*.jar

@@ -159,7 +159,8 @@ public class App {
 	private static void exit() throws Exception {
 		try {
 			if (SystemUtils.IS_OS_WINDOWS) {
-				Runtime.getRuntime().exec("cls");
+				String[] cls = new String[] {"cmd.exe", "/c", "cls"};
+				Runtime.getRuntime().exec(cls); 
 			} else if (SystemUtils.IS_OS_LINUX) {
 				Runtime.getRuntime().exec("clear");
 			} else {
@@ -168,6 +169,9 @@ public class App {
 		} catch (Exception e) {
 			if (e instanceof NotImplementedException) {
 				throw e;
+			}
+			if (debug) {
+				e.printStackTrace();
 			}
 		}
 		o("Thanks for using our production");
