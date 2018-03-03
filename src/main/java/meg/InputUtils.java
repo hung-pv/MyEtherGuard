@@ -6,16 +6,16 @@ public class InputUtils {
 
 	private static final Scanner in = new Scanner(System.in);
 	private static boolean autoTrim = true;
-	
+
 	public static void setAutoTrim(boolean autoTrim) {
 		InputUtils.autoTrim = autoTrim;
 	}
-	
+
 	public static String getRawInput() {
 		String input = in.nextLine();
 		return autoTrim ? input.trim() : input;
 	}
-	
+
 	public static String getInput(int maxLength) {
 		String input = in.nextLine();
 		if (input != null) {
@@ -26,7 +26,7 @@ public class InputUtils {
 		}
 		return autoTrim ? org.apache.commons.lang3.StringUtils.trimToNull(input) : input;
 	}
-	
+
 	public static boolean confirm(String msg) {
 		o(msg);
 		o("Y/N");
@@ -45,10 +45,10 @@ public class InputUtils {
 		} while (input == null);
 		return input;
 	}
-	
+
 	public static int getInt() {
 		String input;
-		while(true) {
+		while (true) {
 			input = org.apache.commons.lang3.StringUtils.trimToNull(getRawInput());
 			try {
 				return Integer.parseInt(input);
@@ -59,6 +59,21 @@ public class InputUtils {
 			}
 		}
 	}
+
+	/*-
+	public static void pressAnyKeyToContinue(String... args) {
+		for (String arg : args) {
+			o(arg);
+		}
+		if (args.length == 0) {
+			o("Press any key to continue...");
+		}
+		try {
+			System.in.read();
+		} catch (Exception e) {
+		}
+	}
+	*/
 
 	private static void o(String pattern, Object... params) {
 		System.out.println(String.format(pattern, params));

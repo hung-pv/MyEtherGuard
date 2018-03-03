@@ -76,4 +76,8 @@ public class WalletInfo {
 		result.noteEncrypted = file.getLine(4) == null ? null : Base64.getDecoder().decode(file.getLine(4));
 		return result;
 	}
+	
+	public static WalletInfo empty() {
+		return new WalletInfo();
+	}
 }

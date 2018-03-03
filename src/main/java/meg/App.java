@@ -7,7 +7,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.Security;
-import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -459,12 +458,25 @@ public class App {
 
 	@SuppressWarnings("unused")
 	private static void signTransaction() throws Exception {
-		
+		MenuManager mm = new MenuManager();
+		mm.add("Sign an Ethereum transaction", "signEthereumTransaction");
+		mm.showOptionList("Target network:");
+		int selection = getMenuSelection();
+		if (selection < 1) {
+			o("Cancelled");
+			return;
+		}
+		mm.getOptionBySelection(selection).processMethod();
+	}
+	
+	@SuppressWarnings("unused")
+	private static void signEthereumTransaction() throws Exception {
+		signEthereumTransaction("8612b0addc93c2fb31f6bcc79e493d846c051abc6e803cfab0c2d9f4187b26c7");
 	}
 	
 	@SuppressWarnings("unused")
 	private static void signEthereumTransaction(String privateKey) throws Exception {
-		BigInteger nonce, gasPrice, gasLimit, amount;
+		BigInteger nonce, gasPrice, gasPriceGwei, gasLimit, amount;
 		String receiveAddress;
 		byte[] bNonce, bGasPrice, bGasLimit, bReceiveAddress, bValue, bData;
 		Integer chainId;
@@ -483,9 +495,13 @@ public class App {
 		nonce = new BigInteger(tmp, 10);
 		bNonce = Hex.decode(NumberUtils.convertBigIntegerToHex(nonce));
 		
-		o("Receiver address");
+		o("Receiver address:");
 		while (true) {
 			receiveAddress = org.apache.commons.lang3.StringUtils.trimToEmpty(InputUtils.getRawInput()).toLowerCase();
+			if (debug && receiveAddress.length() == 0) {
+				receiveAddress = "0x4164B04ad8A00f53E81e781d0d96eF6E4Bcf355f";
+				o("Default: %s", receiveAddress);
+			}
 			if (receiveAddress.startsWith("0x")) {
 				receiveAddress = receiveAddress.substring(2);
 			}
@@ -503,6 +519,10 @@ public class App {
 		String gwei;
 		while(true) {
 			gwei = InputUtils.getRawInput();
+			if (gwei.length() == 0) {
+				gwei = "9";
+				o("Default: %s", gwei);
+			}
 			if (!NumberUtils.isValidExpandedInt(gwei)) {
 				o("Invalid number! Only digits are accepted");
 				o("Try again:");
@@ -511,11 +531,16 @@ public class App {
 			break;
 		}
 		gasPrice = new BigInteger(gwei + "000000000" /*Gwei to Wei*/, 10);
+		gasPriceGwei = new BigInteger(gwei, 10);
 		bGasPrice = Hex.decode(NumberUtils.convertBigIntegerToHex(gasPrice));
 		
 		o("\nGas limit (Should be more than 21000):");
 		while(true) {
 			tmp = InputUtils.getRawInput();
+			if (tmp.length() == 0) {
+				tmp = "21000";
+				o("Default: %s", tmp);
+			}
 			if (!NumberUtils.isValidExpandedInt(tmp)) {
 				o("Invalid number! Digits only");
 				o("Try again:");
@@ -548,11 +573,13 @@ public class App {
 		o("Gas price:");
 		o("\t%s Wei", meg.StringUtils.beautiNumber(gasPrice.toString(10)));
 		o("\t~ %s Gwei", gwei);
-		o("Gas limit: %s", meg.StringUtils.beautiNumber(String.valueOf(gasLimit)));
+		String sGasLimit = meg.StringUtils.beautiNumber(gasLimit.toString(10));
+		o("Gas limit: %s", sGasLimit);
 		o("Receive address: 0x%s", receiveAddress);
 		o("Amount to transfer:");
 		o("\t%s (raw)", meg.StringUtils.beautiNumber(amount.toString(10)));
-		o("\t%s ETH", meg.StringUtils.beautiNumber(NumberUtils.fromBigValue(amount.toString(10), 18)));
+		String sETHAmt = meg.StringUtils.beautiNumber(NumberUtils.fromBigValue(amount.toString(10), 18));
+		o("\t%s ETH", sETHAmt);
 		o("Data: (no data)");
 		
 		if (!InputUtils.confirm("Please CAREFULLY confirm the above informations")) {
@@ -560,8 +587,10 @@ public class App {
 			return;
 		}
 
+		o("--------");
+		ECKey ecSender = WalletUtils.getECKey(privateKey);
 		Transaction tx = new Transaction(bNonce, bGasPrice, bGasLimit, bReceiveAddress, bValue, bData, chainId);
-		tx.sign(WalletUtils.getECKey(privateKey));
+		tx.sign(ecSender);
 
 		o("v:\t %s", Hex.toHexString(new byte[] { tx.getSignature().v }));
 		o("r:\t %s", Hex.toHexString(BigIntegers.asUnsignedByteArray(tx.getSignature().r)));
@@ -575,8 +604,16 @@ public class App {
 
 		o("Signature public key:\t %s", Hex.toHexString(key.getPubKey()));
 		o("Sender is:\t %s", Hex.toHexString(key.getAddress()));
+		o("********");
+		o("You are about to\n\tsend %s ETH", sETHAmt);
+		o("from\n\t%s", WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey));
+		o("to\n\t0x%s", receiveAddress);
+		o("with maximum fee is %s Gwei * %s Gas limit\n\tMAX %s ETH", gwei, sGasLimit, meg.StringUtils.beautiNumber(NumberUtils.fromBigValue(gasPrice.multiply(gasLimit).toString(10), 18)));
 		o(tx.toString());
 		ClipboardUtils.setClipboard(signedTransaction, "Tx signature");
+		if (InputUtils.confirm("Exit?")) {
+			exit();
+		}
 	}
 
 	private static int getMenuSelection() {

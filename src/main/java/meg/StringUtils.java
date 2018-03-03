@@ -60,6 +60,10 @@ public class StringUtils {
 			counter++;
 		}
 		
-		return org.apache.commons.lang3.StringUtils.reverse(sb.toString()) + decimal;
+		String result = org.apache.commons.lang3.StringUtils.reverse(sb.toString()) + decimal;
+		if (result.startsWith(",")) {
+			result = result.substring(1);
+		}
+		return result;
 	}
 }
