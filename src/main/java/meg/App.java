@@ -131,7 +131,7 @@ public class App {
 		}
 		o("Loading keystore");
 		byte[] keyWithBIP39Encode = KeystoreManager.getEncryptedKey();
-		String pwd = InputUtils.getPassword("Passphrase:");
+		String pwd = InputUtils.getPassword("Passphrase: ");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
@@ -208,11 +208,7 @@ public class App {
 			return;
 		}
 
-		String pwd = InputUtils.getPassword("Passphrase (up to 16 chars):");
-		if (pwd == null) {
-			o("Cancelled");
-			return;
-		}
+		String pwd = InputUtils.getPassword_required("Passphrase (up to 16 chars): ", debug ? 1 : 8);
 
 		String cfpwd = InputUtils.getPassword("One more time:");
 		if (cfpwd == null) {
@@ -248,7 +244,7 @@ public class App {
 		o("For sure you already saved these seed words, you have to typing these words again:");
 		String cfmnemonic;
 		while (true) {
-			cfmnemonic = InputUtils.getRawInput();
+			cfmnemonic = InputUtils.getRawInput(null);
 			if (cfmnemonic == null || !mnemonic.equals(cfmnemonic)) {
 				o("Mismatch! Again:");
 				continue;
@@ -278,15 +274,15 @@ public class App {
 			if (first) {
 				first = false;
 			} else {
-				o("Incorrect, input again or type 'cancel'");
+				o("Incorrect, input again or type 'cancel':");
 			}
-			mnemonic = InputUtils.getRawInput();
+			mnemonic = InputUtils.getRawInput(null);
 			if ("cancel".equalsIgnoreCase(mnemonic)) {
 				return;
 			}
 		} while (!isValidSeedWords(mnemonic));
 
-		String pwd = InputUtils.getPassword("Passphrase (up to 16 chars):");
+		String pwd = InputUtils.getPassword("Passphrase: ");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
@@ -369,13 +365,13 @@ public class App {
 
 		o("Enter your private key (will be encrypted):");
 		o("(press Enter to skip)");
-		String privateKey = InputUtils.getInput(64);
+		String privateKey = InputUtils.getPassword(null);
 		byte[] bprivateKey = StringUtil.getBytesNullable(privateKey);
 		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encryptNullable(bprivateKey);
 
 		o("Enter your mnemonic (will be encrypted):");
 		o("(press Enter to skip)");
-		String mnemonic = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
+		String mnemonic = StringUtils.trimToNull(InputUtils.getRawInput(null));
 		if (mnemonic != null) {
 			if (mnemonic.split("\\s").length % 12 != 0) {
 				o("Mnemonic incorrect (can not devided by 12)");
@@ -397,7 +393,7 @@ public class App {
 		} else {
 			o("Address (required, will not be encrypted):");
 			while (true) {
-				address = InputUtils.getInput(68);
+				address = InputUtils.getInput(null, 68);
 				if (InputUtils.confirm("You sure? Please confirm this address again!")) {
 					break;
 				}
@@ -407,7 +403,7 @@ public class App {
 
 		o("Note - this content can NOT be changed later (optional, will be encrypted):");
 		o("(press Enter to skip)");
-		String note = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
+		String note = StringUtils.trimToNull(InputUtils.getRawInput(null));
 		byte[] bnote = StringUtil.getBytesNullable(note);
 		byte[] noteWithAES256Encrypted = aes256Cipher.encryptNullable(bnote);
 
@@ -557,11 +553,12 @@ public class App {
 		String receiveAddress;
 		byte[] bNonce, bGasPrice, bGasLimit, bReceiveAddress, bValue, bData;
 		Integer chainId;
+		
+		o("\n");
 
-		o("\nNonce:");
 		String tmp;
 		while (true) {
-			tmp = InputUtils.getRawInput();
+			tmp = InputUtils.getRawInput("Nonce: ");
 			if (!NumberUtils.isValidExpandedInt(tmp)) {
 				o("Invalid number! Digits only");
 				o("Try again:");
@@ -572,9 +569,9 @@ public class App {
 		nonce = new BigInteger(tmp, 10);
 		bNonce = Hex.decode(NumberUtils.convertBigIntegerToHex(nonce));
 
-		o("Receiver address:");
+		o("\nReceiver address:");
 		while (true) {
-			receiveAddress = org.apache.commons.lang3.StringUtils.trimToEmpty(InputUtils.getRawInput()).toLowerCase();
+			receiveAddress = StringUtils.trimToEmpty(InputUtils.getRawInput(null)).toLowerCase();
 			if (debug && receiveAddress.length() == 0) {
 				receiveAddress = "0x4164B04ad8A00f53E81e781d0d96eF6E4Bcf355f";
 				o("Default: %s", receiveAddress);
@@ -592,17 +589,15 @@ public class App {
 		}
 
 		o("\nGas price (Should be more than 9 Gwei)");
-		o("Gwei:");
 		String gwei;
 		while (true) {
-			gwei = InputUtils.getRawInput();
+			gwei = InputUtils.getRawInput("Gwei: ");
 			if (gwei.length() == 0) {
 				gwei = "9";
 				o("Default: %s", gwei);
 			}
 			if (!NumberUtils.isValidExpandedInt(gwei)) {
 				o("Invalid number! Only digits are accepted");
-				o("Try again:");
 				continue;
 			}
 			break;
@@ -611,16 +606,16 @@ public class App {
 		gasPriceGwei = new BigInteger(gwei, 10);
 		bGasPrice = Hex.decode(NumberUtils.convertBigIntegerToHex(gasPrice));
 
-		o("\nGas limit (Should be more than 21000):");
+		o("\n");
+		tmp = InputUtils.getRawInput("Gas limit (Should be more than 21000): ");
 		while (true) {
-			tmp = InputUtils.getRawInput();
 			if (tmp.length() == 0) {
 				tmp = "21000";
 				o("Default: %s", tmp);
 			}
 			if (!NumberUtils.isValidExpandedInt(tmp)) {
 				o("Invalid number! Digits only");
-				o("Try again:");
+				tmp = InputUtils.getRawInput("Gas limit: ");
 				continue;
 			}
 			break;
@@ -628,12 +623,11 @@ public class App {
 		gasLimit = new BigInteger(tmp, 10);
 		bGasLimit = Hex.decode(NumberUtils.convertBigIntegerToHex(gasLimit));
 
-		o("Amount ETH to send:");
+		o("\n");
 		while (true) {
-			tmp = InputUtils.getRawInput();
+			tmp = InputUtils.getRawInput("Amount ETH to send: ");
 			if (!NumberUtils.isValidExpandedDouble(tmp)) {
 				o("Invalid double value! Accepted format is # or #.##");
-				o("Try again:");
 				continue;
 			}
 			break;
@@ -645,11 +639,11 @@ public class App {
 
 		chainId = new Integer(1); // ETH chain fixed 1
 
-		o("Please CAREFULLY check the following informations:");
+		o("\nPlease CAREFULLY check the following informations:");
 		o("Nonce: %d", nonce);
 		o("Gas price:");
 		o("\t%s Wei", StringUtil.beautiNumber(gasPrice.toString(10)));
-		o("\t~ %s Gwei", gwei);
+		o("\t~ %s Gwei", StringUtil.beautiNumber(gwei));
 		String sGasLimit = StringUtil.beautiNumber(gasLimit.toString(10));
 		o("Gas limit: %s", sGasLimit);
 		o("Receive address: 0x%s", receiveAddress);
@@ -664,7 +658,7 @@ public class App {
 			return;
 		}
 
-		o("--------");
+		o("-- please wait --");
 		ECKey ecSender = WalletUtils.getECKey(privateKey);
 		Transaction tx = new Transaction(bNonce, bGasPrice, bGasLimit, bReceiveAddress, bValue, bData, chainId);
 		tx.sign(ecSender);
@@ -681,11 +675,11 @@ public class App {
 
 		o("Signature public key:\t %s", Hex.toHexString(key.getPubKey()));
 		o("Sender is:\t %s", Hex.toHexString(key.getAddress()));
-		o("********");
+		o("********\n");
 		o("You are about to\n\tsend %s ETH", sETHAmt);
 		o("from\n\t%s", WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey));
 		o("to\n\t0x%s", receiveAddress);
-		o("with maximum fee is %s Gwei * %s Gas limit\n\tMAX %s ETH", gwei, sGasLimit,
+		o("with maximum fee is %s Gwei * %s Gas limit\n\tMAX %s ETH", StringUtil.beautiNumber(gwei), sGasLimit,
 				StringUtil.beautiNumber(NumberUtils.fromBigValue(gasPrice.multiply(gasLimit).toString(10), 18)));
 		o(tx.toString());
 		ClipboardUtils.setText(signedTransaction, "Tx signature");
@@ -722,7 +716,7 @@ public class App {
 		String csProductionName = StringUtil.getSimpleCheckSum(productionName);
 
 		o("Remarks (optional, will be encrypted):");
-		String remark = InputUtils.getRawInput();
+		String remark = InputUtils.getRawInput(null);
 
 		byte[] encrypted2fa = aes256Cipher.encrypt(_2fa.getBytes(StandardCharsets.UTF_8));
 		byte[] encryptedRemarks = aes256Cipher
@@ -743,12 +737,12 @@ public class App {
 				return;
 			}
 			o("If you want to override, type 'I AGREE':");
-			if (!"i agree".equalsIgnoreCase(InputUtils.getRawInput())) {
+			if (!"i agree".equalsIgnoreCase(InputUtils.getRawInput(null))) {
 				o(">> You did not agree! Action aborted");
 				return;
 			}
 			o("Now type 'OVERRIDE'");
-			String input = InputUtils.getRawInput();
+			String input = InputUtils.getRawInput(null);
 			if (input.equalsIgnoreCase("override") || input.equalsIgnoreCase("overide")) {
 				FileUtils.deleteQuietly(file);
 				UniqueFileUtils.write(file, f2aInfo.toRaw());
@@ -818,8 +812,7 @@ public class App {
 	}
 
 	private static int getMenuSelection() {
-		o("Action:");
-		String input = InputUtils.getInput(1);
+		String input = InputUtils.getInput("Action: ", 1);
 		if (input == null) {
 			return 0;
 		}
