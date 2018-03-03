@@ -1,6 +1,9 @@
 package meg;
 
 import java.util.Scanner;
+import java.util.regex.Pattern;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class InputUtils {
 
@@ -59,7 +62,48 @@ public class InputUtils {
 			}
 		}
 	}
-
+	
+	public static String getInput2faPrivateKey() {
+		return getInput("2fa private key", true, "^[aA-zZ0-9]{4,}$", "Alphabet and numeric only, more than 4 characters", null);
+	}
+	
+	@SuppressWarnings("unchecked")
+	public static <RC> RC getInput(String name, boolean blankable, String regexPattern, String descripbleRegexPattern, IConvert<RC> converter) {
+		String input;
+		
+		while (true) {
+			input = getRawInput();
+			if (!blankable && StringUtils.isBlank(input)) {
+				if (name == null) {
+					o("Could not be empty, try again:");
+				} else {
+					o("%s could not be empty, try again:", name);
+				}
+				continue;
+			}
+			if (regexPattern != null && regexPattern.length() > 0) {
+				if (!Pattern.matches(regexPattern,  input)) {
+					String additinalInfo = name == null ? "" : " of " + name;
+					if (descripbleRegexPattern == null) {
+						o("Invalid format%s, please try again:", additinalInfo);
+					} else {
+						o("Invalid format%s !!!", additinalInfo);
+						o(descripbleRegexPattern);
+						o("Please try again:");
+					}
+					continue;
+				}
+			}
+			break;
+		}
+		
+		if (converter != null) {
+			return converter.convert(input);
+		}
+		
+		return (RC)input;
+	}
+	
 	/*-
 	public static void pressAnyKeyToContinue(String... args) {
 		for (String arg : args) {

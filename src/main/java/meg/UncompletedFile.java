@@ -30,7 +30,7 @@ public class UncompletedFile {
 	@Override
 	public String toString() {
 		final StringBuilder sb = new StringBuilder();
-		sb.append("DO NOT change content of this file, any modification will corrupt this file and LOSING data FOREVER\n");
+		sb.append("DO NOT change content of this file, any modification will corrupt this file and LOSING data FOREVER! (" + App.getAdditionalDetailInformation() + ")\n");
 		this.lines.forEach(line -> {
 			if (line == null) {
 				sb.append('0');

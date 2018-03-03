@@ -1,10 +1,14 @@
 package meg;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Formatter;
 
-public class StringUtils {
+import org.apache.commons.lang3.StringUtils;
+
+public class StringUtil {
 
 	public static byte[] getBytes(String text, int size) {
 		return getBytes(text, size, StandardCharsets.UTF_8);
@@ -65,5 +69,24 @@ public class StringUtils {
 			result = result.substring(1);
 		}
 		return result;
+	}
+	
+	public static String toPathChars(String original) {
+		return original.replaceAll("[^aA-zZ0-9_-]", "_");
+	}
+	
+	public static String getSimpleCheckSum(String text) {
+		if (StringUtils.isBlank(text)) return "0000";
+		int sum = 0;
+		for (byte b : text.getBytes(StandardCharsets.UTF_8)) {
+			sum+=b;
+		}
+		return toPathChars(String.valueOf(sum));
+	}
+	
+	public static String getDomainName(String url) throws URISyntaxException {
+	    URI uri = new URI(url);
+	    String domain = uri.getHost();
+	    return domain.startsWith("www.") ? domain.substring(4) : domain;
 	}
 }

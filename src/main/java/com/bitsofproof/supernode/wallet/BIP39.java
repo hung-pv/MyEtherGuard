@@ -31,7 +31,7 @@ import javax.crypto.spec.SecretKeySpec;
 import com.bitsofproof.supernode.common.Hash;
 import com.bitsofproof.supernode.common.ValidationException;
 
-import meg.StringUtils;
+import meg.StringUtil;
 
 public class BIP39 {
 	public static byte[] decode(String mnemonic, String passphrase) throws ValidationException {
@@ -60,7 +60,7 @@ public class BIP39 {
 			}
 		}
 		try {
-			SecretKey seedkey = new SecretKeySpec(StringUtils.getBytes(passphrase, 16), "Blowfish");
+			SecretKey seedkey = new SecretKeySpec(StringUtil.getBytes(passphrase, 16), "Blowfish");
 			Cipher cipher = Cipher.getInstance("BlowFish/ECB/NoPadding", "BC");
 			cipher.init(Cipher.DECRYPT_MODE, seedkey);
 			for (i = 0; i < 1000; ++i) {
@@ -78,7 +78,7 @@ public class BIP39 {
 			throw new ValidationException("can nor encode - data length not divisible with 8");
 		}
 		try {
-			SecretKey seedkey = new SecretKeySpec(StringUtils.getBytes(passphrase, 16), "Blowfish");
+			SecretKey seedkey = new SecretKeySpec(StringUtil.getBytes(passphrase, 16), "Blowfish");
 			Cipher cipher = Cipher.getInstance("BlowFish/ECB/NoPadding", "BC");
 			cipher.init(Cipher.ENCRYPT_MODE, seedkey);
 			for (int i = 0; i < 1000; ++i) {

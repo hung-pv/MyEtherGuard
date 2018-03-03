@@ -7,9 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.Security;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -17,6 +19,8 @@ import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.NotImplementedException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.ethereum.core.Transaction;
 import org.ethereum.crypto.ECKey;
@@ -29,6 +33,7 @@ import meg.KeystoreManager.KeystoreContent;
 import meg.crypto.AES128;
 import meg.crypto.AES256;
 import meg.crypto.CryptoException;
+import meg.f2a.F2aInfo;
 import meg.menu.MenuManager;
 import meg.wallet.WalletInfo;
 import meg.wallet.WalletType;
@@ -36,10 +41,13 @@ import meg.wallet.WalletUtils;
 
 public class App {
 
+	private static final double VERSION = 0.1;
+
 	private static final String FILE_IMG_EXT = "dll";
 	private static final String FILE_WALLET_EXT = "ocx";
+	public static final String FILE_2FA_EXT = "2fa";
 
-	private static final int MAX_IDIE_TIME_SEC = 60;
+	private static final int MAX_IDIE_TIME_SEC = 120;
 
 	private static boolean holdon = false;
 
@@ -81,11 +89,13 @@ public class App {
 			mm.add("RESTORE keystore", "restoreKeyStore");
 			mm.add("NEW keystore", "generateKeyStore");
 		} else {
+			mm.add("Sign transaction (currently supports ERC20 only)", "signTransaction", true);
 			mm.add("Save wallet private key", "saveWalletPrivateKey", true);
 			mm.add("Get wallet private key", "getWalletPrivateKey", true);
-			mm.add("Sign transaction (currently supports ERC20 only)", "signTransaction", true);
-			mm.add("Save screen shot", "saveScreenShot", true);
-			mm.add("Show screen shot", "showScreenShot", true);
+			mm.add("Save 2FA key", "save2fa", true);
+			mm.add("Get 2FA key", "get2fa", true);
+			// TODO mm.add("Save screen shot", "saveScreenShot", true);
+			// mm.add("Show screen shot", "showScreenShot", true);
 		}
 		mm.add("Exit", "exit");
 		mm.showOptionList("\n\n==========\n\nChoose an action:");
@@ -121,7 +131,7 @@ public class App {
 		}
 		o("Loading keystore");
 		byte[] keyWithBIP39Encode = KeystoreManager.getEncryptedKey();
-		String pwd = InputUtils.getPassword("Pass pharse:");
+		String pwd = InputUtils.getPassword("Passphrase:");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
@@ -133,15 +143,33 @@ public class App {
 		try {
 			key = AES128.decrypt(keyWithAES128, pwd);
 		} catch (CryptoException e) {
-			o("Incorrect pass pharse");
+			o("Incorrect passphrase");
 			System.exit(1);
 			return;
 		}
 		aes256Cipher = new AES256(key, pwd);
 	}
 
-	@SuppressWarnings("unused")
-	private static void exit() {
+	private static void askContinueOrExit(String question) throws Exception {
+		if (!InputUtils.confirm(question == null ? "Continue?" : question)) {
+			exit();
+		}
+	}
+
+	private static void exit() throws Exception {
+		try {
+			if (SystemUtils.IS_OS_WINDOWS) {
+				Runtime.getRuntime().exec("cls");
+			} else if (SystemUtils.IS_OS_LINUX) {
+				Runtime.getRuntime().exec("clear");
+			} else {
+				throw new NotImplementedException("Clear screen for " + SystemUtils.OS_NAME);
+			}
+		} catch (Exception e) {
+			if (e instanceof NotImplementedException) {
+				throw e;
+			}
+		}
 		o("Thanks for using our production");
 		System.exit(0);
 	}
@@ -176,7 +204,7 @@ public class App {
 			return;
 		}
 
-		String pwd = InputUtils.getPassword("Pass pharse (up to 16 chars):");
+		String pwd = InputUtils.getPassword("Passphrase (up to 16 chars):");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
@@ -189,7 +217,7 @@ public class App {
 		}
 
 		if (!pwd.equals(cfpwd)) {
-			o("Mismatch confirmation pass pharse");
+			o("Mismatch confirmation passphrase");
 			return;
 		}
 
@@ -203,7 +231,7 @@ public class App {
 		o("Following is %d seeds word,\n you HAVE TO write it down and keep it safe.\n Losing these words, you can not restore your private key",
 				mnemonic.split("\\s").length);
 		o("\n%s\n", mnemonic);
-		ClipboardUtils.setClipboard(mnemonic, "Mnemonic");
+		ClipboardUtils.setText(mnemonic, "Mnemonic");
 		// Verify BIP39
 		byte[] keyToVerify = AES128.decrypt(BIP39.decode(mnemonic, pwd), pwd);
 		for (int i = 0; i < key.length; i++) {
@@ -254,7 +282,7 @@ public class App {
 			}
 		} while (!isValidSeedWords(mnemonic));
 
-		String pwd = InputUtils.getPassword("Pass pharse (up to 16 chars):");
+		String pwd = InputUtils.getPassword("Passphrase (up to 16 chars):");
 		if (pwd == null) {
 			o("Cancelled");
 			return;
@@ -280,13 +308,13 @@ public class App {
 			if (cacheSeedWordsLength > 0) {
 				String mnemonicFromUsbID = new String(AES256.decrypt(usbIdContent, key, pwd), StandardCharsets.UTF_8);
 				if (!mnemonic.trim().equals(mnemonicFromUsbID.trim())) {
-					o("Incorrect! You have to check your seed words and your pass pharse then try again!");
+					o("Incorrect! You have to check your seed words and your passphrase then try again!");
 					o("Hint: seed contains %d words", cacheSeedWordsLength);
 					return;
 				}
 			}
 		} catch (Exception e) {
-			o("Look like something wrong, you have to check your seed words and your pass pharse then try again!");
+			o("Look like something wrong, you have to check your seed words and your passphrase then try again!");
 			o("Hint: seed contains %d words", cacheSeedWordsLength);
 			return;
 		}
@@ -302,7 +330,7 @@ public class App {
 
 	private static void saveChecksum(String mnemonic, byte[] key, String pwd) throws Exception {
 		try {
-			byte[] content = AES256.encrypt(meg.StringUtils.getBytes(mnemonic, 256), key, pwd);
+			byte[] content = AES256.encrypt(StringUtil.getBytes(mnemonic, 256), key, pwd);
 			byte[] buffer = new byte[content.length + 1];
 			System.arraycopy(content, 0, buffer, 1, content.length);
 			buffer[0] = (byte) mnemonic.split("\\s").length;
@@ -335,13 +363,13 @@ public class App {
 
 		WalletType wt = WalletType.values()[selection - 1];
 
-		o("Enter your private key:");
+		o("Enter your private key (will be encrypted):");
 		o("(press Enter to skip)");
 		String privateKey = InputUtils.getInput(64);
-		byte[] bprivateKey = meg.StringUtils.getBytesNullable(privateKey);
+		byte[] bprivateKey = StringUtil.getBytesNullable(privateKey);
 		byte[] privateKeyWithAES256Encrypted = aes256Cipher.encryptNullable(bprivateKey);
-		
-		o("Enter your mnemonic:");
+
+		o("Enter your mnemonic (will be encrypted):");
 		o("(press Enter to skip)");
 		String mnemonic = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
 		if (mnemonic != null) {
@@ -351,9 +379,9 @@ public class App {
 				return;
 			}
 		}
-		byte[] bmnemonic = meg.StringUtils.getBytesNullable(mnemonic);
+		byte[] bmnemonic = StringUtil.getBytesNullable(mnemonic);
 		byte[] mnemonicWithAES256Encrypted = aes256Cipher.encryptNullable(bmnemonic);
-		
+
 		if (privateKey == null && mnemonic == null) {
 			o("You must provide at least one information, Private Key or Mnemonic seed words");
 			return;
@@ -363,7 +391,7 @@ public class App {
 		if (wt == WalletType.ERC20 && privateKey != null) {
 			address = WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey);
 		} else {
-			o("Address:");
+			o("Address (required, will not be encrypted):");
 			while (true) {
 				address = InputUtils.getInput(68);
 				if (InputUtils.confirm("You sure? Please confirm this address again!")) {
@@ -372,14 +400,18 @@ public class App {
 				o("Address:");
 			}
 		}
-		
-		o("Note - this content can NOT be changed later:");
+
+		o("Note - this content can NOT be changed later (optional, will be encrypted):");
 		o("(press Enter to skip)");
 		String note = org.apache.commons.lang3.StringUtils.trimToNull(InputUtils.getRawInput());
-		byte[] bnote = meg.StringUtils.getBytesNullable(note);
+		byte[] bnote = StringUtil.getBytesNullable(note);
 		byte[] noteWithAES256Encrypted = aes256Cipher.encryptNullable(bnote);
 
-		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted, mnemonicWithAES256Encrypted, noteWithAES256Encrypted);
+		// Clear clip-board
+		ClipboardUtils.clear();
+
+		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted,
+				mnemonicWithAES256Encrypted, noteWithAES256Encrypted);
 		File file = getUSB().getFileInUsb(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
 		try {
 			UniqueFileUtils.write(file, wi.toRaw());
@@ -390,6 +422,8 @@ public class App {
 		}
 
 		o("Saved %s", address);
+
+		askContinueOrExit(null);
 	}
 
 	@SuppressWarnings("unused")
@@ -421,31 +455,36 @@ public class App {
 			o("Invalid selection");
 			return;
 		}
-		File wallet = wallets.get(selection - 1);
-		WalletInfo wi = WalletUtils.readWalletInfo(wallet);
+		File walletFile = wallets.get(selection - 1);
+		WalletInfo wi = WalletInfo.fromUncompletedFile(UncompletedFile.fromFile(walletFile));
 		o("Address:");
 		o("\t%s", wi.getAddress());
-		
+
 		String privateKey = null, mnemonic = null;
-		
+
 		if (wi.containsPrivateKey()) {
 			byte[] keyBytes = aes256Cipher.decrypt(wi.getPrivateKeyEncrypted());
 			privateKey = new String(keyBytes, StandardCharsets.UTF_8);
 			o("Private key:");
 			o("\t%s", privateKey);
 		}
-		
+
 		if (wi.containsMnemonic()) {
 			byte[] mnemonicBytes = aes256Cipher.decrypt(wi.getMnemonicEncrypted());
 			mnemonic = new String(mnemonicBytes, StandardCharsets.UTF_8);
 			o("Mnemonic:");
 			o("\t%s", mnemonic);
 		}
-		
+
+		boolean copy = false;
 		if (wi.containsMnemonic()) {
-			ClipboardUtils.setClipboard(mnemonic, "Mnemonic");
+			if (copy = InputUtils.confirm("Copy mnemonic to clipboard?")) {
+				ClipboardUtils.setText(mnemonic, "Mnemonic");
+			}
 		} else if (wi.containsPrivateKey()) {
-			ClipboardUtils.setClipboard(privateKey, "Private key");
+			if (copy = InputUtils.confirm("Copy private key to clipboard?")) {
+				ClipboardUtils.setText(privateKey, "Private key");
+			}
 		}
 
 		if (wi.containsNote()) {
@@ -453,6 +492,27 @@ public class App {
 			String note = new String(noteBytes, StandardCharsets.UTF_8);
 			o("Note:");
 			o("\t%s", note);
+		}
+
+		if (copy) {
+			o("ALERT: your clipboard current contains important data (private key, mnemonic)");
+			o("It should be cleared !!!");
+			o("Once you've done your job, tell me, I will clear these data from clipboard");
+			o("Have you done your job?");
+			while (!InputUtils.confirm("I'm done")) {
+				o("Just continue your job, I will WAITING for you");
+			}
+			ClipboardUtils.clear();
+		} else {
+			o("ALERT: when you copy to clipboard, it contains important data (private key, mnemonic)");
+			o("That should be cleared !!!");
+			o("Once you've done your job, tell me, I will clear these data from clipboard");
+			if (InputUtils.confirm("Clear it?")) {
+				ClipboardUtils.clear();
+				exit();
+			}
+			o("No, you have to clear it! I will clear your clip-board without permission! HAHA");
+			ClipboardUtils.clear();
 		}
 	}
 
@@ -468,22 +528,35 @@ public class App {
 		}
 		mm.getOptionBySelection(selection).processMethod();
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void signEthereumTransaction() throws Exception {
-		signEthereumTransaction("8612b0addc93c2fb31f6bcc79e493d846c051abc6e803cfab0c2d9f4187b26c7");
+		File walletFile = selectWallet(WalletType.ERC20);
+		if (walletFile == null) {
+			return;
+		}
+
+		WalletInfo wi = WalletInfo.fromUncompletedFile(UncompletedFile.fromFile(walletFile));
+		if (!wi.containsPrivateKey()) {
+			o("This Wallet does not contains private key !!!");
+			o("Only wallets with private key are allowed to sign transaction");
+			return;
+		}
+
+		String key = new String(aes256Cipher.decrypt(wi.getPrivateKeyEncrypted()), StandardCharsets.UTF_8);
+		signEthereumTransaction(key);
 	}
-	
+
 	@SuppressWarnings("unused")
 	private static void signEthereumTransaction(String privateKey) throws Exception {
 		BigInteger nonce, gasPrice, gasPriceGwei, gasLimit, amount;
 		String receiveAddress;
 		byte[] bNonce, bGasPrice, bGasLimit, bReceiveAddress, bValue, bData;
 		Integer chainId;
-		
+
 		o("\nNonce:");
 		String tmp;
-		while(true) {
+		while (true) {
 			tmp = InputUtils.getRawInput();
 			if (!NumberUtils.isValidExpandedInt(tmp)) {
 				o("Invalid number! Digits only");
@@ -494,7 +567,7 @@ public class App {
 		}
 		nonce = new BigInteger(tmp, 10);
 		bNonce = Hex.decode(NumberUtils.convertBigIntegerToHex(nonce));
-		
+
 		o("Receiver address:");
 		while (true) {
 			receiveAddress = org.apache.commons.lang3.StringUtils.trimToEmpty(InputUtils.getRawInput()).toLowerCase();
@@ -513,11 +586,11 @@ public class App {
 			bReceiveAddress = Hex.decode(receiveAddress);
 			break;
 		}
-		
+
 		o("\nGas price (Should be more than 9 Gwei)");
 		o("Gwei:");
 		String gwei;
-		while(true) {
+		while (true) {
 			gwei = InputUtils.getRawInput();
 			if (gwei.length() == 0) {
 				gwei = "9";
@@ -530,12 +603,12 @@ public class App {
 			}
 			break;
 		}
-		gasPrice = new BigInteger(gwei + "000000000" /*Gwei to Wei*/, 10);
+		gasPrice = new BigInteger(gwei + "000000000" /* Gwei to Wei */, 10);
 		gasPriceGwei = new BigInteger(gwei, 10);
 		bGasPrice = Hex.decode(NumberUtils.convertBigIntegerToHex(gasPrice));
-		
+
 		o("\nGas limit (Should be more than 21000):");
-		while(true) {
+		while (true) {
 			tmp = InputUtils.getRawInput();
 			if (tmp.length() == 0) {
 				tmp = "21000";
@@ -550,9 +623,9 @@ public class App {
 		}
 		gasLimit = new BigInteger(tmp, 10);
 		bGasLimit = Hex.decode(NumberUtils.convertBigIntegerToHex(gasLimit));
-		
+
 		o("Amount ETH to send:");
-		while(true) {
+		while (true) {
 			tmp = InputUtils.getRawInput();
 			if (!NumberUtils.isValidExpandedDouble(tmp)) {
 				o("Invalid double value! Accepted format is # or #.##");
@@ -563,25 +636,25 @@ public class App {
 		}
 		amount = new BigInteger(NumberUtils.toBigValue(tmp, 18), 10);
 		bValue = Hex.decode(NumberUtils.convertBigIntegerToHex(amount));
-		
+
 		bData = null; // fixed to null for ETH
-		
+
 		chainId = new Integer(1); // ETH chain fixed 1
-		
+
 		o("Please CAREFULLY check the following informations:");
 		o("Nonce: %d", nonce);
 		o("Gas price:");
-		o("\t%s Wei", meg.StringUtils.beautiNumber(gasPrice.toString(10)));
+		o("\t%s Wei", StringUtil.beautiNumber(gasPrice.toString(10)));
 		o("\t~ %s Gwei", gwei);
-		String sGasLimit = meg.StringUtils.beautiNumber(gasLimit.toString(10));
+		String sGasLimit = StringUtil.beautiNumber(gasLimit.toString(10));
 		o("Gas limit: %s", sGasLimit);
 		o("Receive address: 0x%s", receiveAddress);
 		o("Amount to transfer:");
-		o("\t%s (raw)", meg.StringUtils.beautiNumber(amount.toString(10)));
-		String sETHAmt = meg.StringUtils.beautiNumber(NumberUtils.fromBigValue(amount.toString(10), 18));
+		o("\t%s (raw)", StringUtil.beautiNumber(amount.toString(10)));
+		String sETHAmt = StringUtil.beautiNumber(NumberUtils.fromBigValue(amount.toString(10), 18));
 		o("\t%s ETH", sETHAmt);
 		o("Data: (no data)");
-		
+
 		if (!InputUtils.confirm("Please CAREFULLY confirm the above informations")) {
 			o("Abort!!!");
 			return;
@@ -608,12 +681,136 @@ public class App {
 		o("You are about to\n\tsend %s ETH", sETHAmt);
 		o("from\n\t%s", WalletUtils.getFriendlyEthAddressFromPrivateKey(privateKey));
 		o("to\n\t0x%s", receiveAddress);
-		o("with maximum fee is %s Gwei * %s Gas limit\n\tMAX %s ETH", gwei, sGasLimit, meg.StringUtils.beautiNumber(NumberUtils.fromBigValue(gasPrice.multiply(gasLimit).toString(10), 18)));
+		o("with maximum fee is %s Gwei * %s Gas limit\n\tMAX %s ETH", gwei, sGasLimit,
+				StringUtil.beautiNumber(NumberUtils.fromBigValue(gasPrice.multiply(gasLimit).toString(10), 18)));
 		o(tx.toString());
-		ClipboardUtils.setClipboard(signedTransaction, "Tx signature");
-		if (InputUtils.confirm("Exit?")) {
-			exit();
+		ClipboardUtils.setText(signedTransaction, "Tx signature");
+
+		askContinueOrExit(null);
+	}
+
+	@SuppressWarnings("unused")
+	private static void save2fa() throws Exception {
+		ClipboardUtils.clear();
+		o("NOTICE: Please DO NOT copy and paste 2fa private key, just type it manually !!!");
+		o("2FA private key (will be encrypted):");
+		String _2fa = InputUtils.getInput2faPrivateKey();
+		if (StringUtils.isBlank(_2fa)) {
+			o("Cancelled");
+			return;
 		}
+
+		ClipboardUtils.clear();
+		o("Type it again:");
+		String _cf2fa = InputUtils.getInput2faPrivateKey();
+		if (!_2fa.equals(_cf2fa)) {
+			o("Mismatch, action aborted!");
+			return;
+		}
+
+		o("Account name (required, will not be encrypted so should not contains private information):");
+		String account = InputUtils.getInput("account", false, "^[^\\s]+$",
+				"Could not be empty or contains any Blank space", null);
+		String csAccount = StringUtil.getSimpleCheckSum(account);
+
+		o("Website or production name (required, will not be encrypted so should not contains private information):");
+		String productionName = InputUtils.getInput("website or production name", false, null, null, null);
+		String csProductionName = StringUtil.getSimpleCheckSum(productionName);
+
+		o("Remarks (optional, will be encrypted):");
+		String remark = InputUtils.getRawInput();
+
+		byte[] encrypted2fa = aes256Cipher.encrypt(_2fa.getBytes(StandardCharsets.UTF_8));
+		byte[] encryptedRemarks = aes256Cipher
+				.encryptNullable(StringUtils.isBlank(remark) ? null : remark.getBytes(StandardCharsets.UTF_8));
+
+		// Clear clip-board
+		ClipboardUtils.clear();
+
+		F2aInfo f2aInfo = new F2aInfo(encrypted2fa, account, productionName, encryptedRemarks);
+		File file = getUSB().getFileInUsb(f2aInfo.getFileName());
+		try {
+			UniqueFileUtils.write(file, f2aInfo.toRaw());
+		} catch (FileExistsException e) {
+			o("** This account/website or production is already exists in your device, named '%s'", file.getName());
+			o(">> if you want to override, the old data will be lost forever ! Please becareful");
+			if (!InputUtils.confirm("Do you understand?")) {
+				o(">> Aborted");
+				return;
+			}
+			o("If you want to override, type 'I AGREE':");
+			if (!"i agree".equalsIgnoreCase(InputUtils.getRawInput())) {
+				o(">> You did not agree! Action aborted");
+				return;
+			}
+			o("Now type 'OVERRIDE'");
+			String input = InputUtils.getRawInput();
+			if (input.equalsIgnoreCase("override") || input.equalsIgnoreCase("overide")) {
+				FileUtils.deleteQuietly(file);
+				UniqueFileUtils.write(file, f2aInfo.toRaw());
+			} else {
+				o(">> You did not type 'OVERRIDE' ! Action aborted");
+				return;
+			}
+		}
+
+		o("Saved 2fa private key for account '%s' of '%s'", account, productionName);
+		askContinueOrExit(null);
+	}
+
+	@SuppressWarnings("unused")
+	private static void get2fa() throws Exception {
+		List<File> files = Arrays.asList(getUSB().getFilesInUsb()).stream()
+				.filter(f -> f.getName().endsWith("." + FILE_2FA_EXT)).collect(Collectors.toList());
+		if (files.isEmpty()) {
+			o("Empty !!!");
+			return;
+		}
+		final List<F2aInfo> f2aFiles = new ArrayList<>();
+		files.stream().forEach(f -> {
+			try {
+				f2aFiles.add(F2aInfo.fromUncompletedFile(UncompletedFile.fromFile(f)));
+			} catch (Exception e) {
+				o("%s error: %s", f.getName(), e.getMessage());
+			}
+		});
+
+		o("Select an account:");
+		for (int i = 0; i < f2aFiles.size(); i++) {
+			F2aInfo f2aInfo = f2aFiles.get(i);
+			o(" %d. account '%s' of '%s'", i + 1, f2aInfo.getAccount(), f2aInfo.getProductionName());
+		}
+
+		o("Take one or 0 to cancel:");
+		int selection;
+
+		while (true) {
+			selection = getMenuSelection();
+			if (selection < 1) {
+				o("Cancelled");
+				return;
+			}
+			if (selection > f2aFiles.size()) {
+				o("Invalid selection! Choose again:");
+				continue;
+			}
+			break;
+		}
+
+		F2aInfo target = f2aFiles.get(selection - 1);
+
+		String _2faPrivateKey = new String(aes256Cipher.decrypt(target.getEncrypted2faPrivateKey()),
+				StandardCharsets.UTF_8);
+		o("2FA private key: %s", _2faPrivateKey);
+
+		if (target.containsEncryptedRemark()) {
+			String remark = new String(aes256Cipher.decrypt(target.getEncryptedRemark()), StandardCharsets.UTF_8);
+			o("Remark:\n%s", remark);
+		}
+
+		ClipboardUtils.setText(_2faPrivateKey, "2fa private key");
+
+		askContinueOrExit(null);
 	}
 
 	private static int getMenuSelection() {
@@ -678,6 +875,8 @@ public class App {
 							continue FileOnDevice;
 						} else if (file.getName().toLowerCase().endsWith(FILE_WALLET_EXT.toLowerCase())) {
 							continue FileOnDevice;
+						} else if (file.getName().toLowerCase().endsWith(FILE_2FA_EXT.toLowerCase())) {
+							continue FileOnDevice;
 						} else {
 							o("Usb %s should not contains any file except *.%s and *.%s files. Skip this device",
 									root.getAbsolutePath(), FILE_IMG_EXT, FILE_WALLET_EXT);
@@ -692,5 +891,55 @@ public class App {
 			return _usb = new USB(root);
 		}
 		return _usb = new USB(null);
+	}
+
+	private static File selectWallet(WalletType wt) {
+		USB usb = getUSB();
+		List<File> walletFiles = Arrays.asList(usb.getFilesInUsb()).stream()//
+				.filter(f -> f.getName().endsWith("." + FILE_WALLET_EXT)).collect(Collectors.toList());
+		if (walletFiles.isEmpty()) {
+			o("No wallet exists in device");
+			return null;
+		}
+
+		walletFiles = walletFiles.stream()
+				.filter(f -> f.getName().toLowerCase().contains("." + wt.name().toLowerCase() + "."))
+				.collect(Collectors.toList());
+		if (walletFiles.isEmpty()) {
+			o("No wallet of type %s exists in device", wt.getDisplayText());
+			return null;
+		}
+
+		o("Existing wallets:");
+		for (int select = 1; select <= walletFiles.size(); select++) {
+			String name = walletFiles.get(select - 1).getName();
+			String[] spl = name.split("\\.");
+			String address = spl[0];
+			String type = spl.length < 3 ? "other" : spl[1];
+			o(" %d. %s (%s)", select, address, type);
+		}
+		o("Take one or 0 to cancel:");
+		int selection;
+
+		while (true) {
+			selection = getMenuSelection();
+			if (selection < 1) {
+				o("Cancelled");
+				return null;
+			}
+			if (selection > walletFiles.size()) {
+				o("Invalid selection! Choose again:");
+				continue;
+			}
+			break;
+		}
+		return walletFiles.get(selection - 1);
+	}
+
+	private static final SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss dd/MM/yy");
+
+	public static String getAdditionalDetailInformation() {
+		return String.format("JVM %s, version %f, at %s", Runtime.class.getPackage().getImplementationVersion(),
+				VERSION, sdf.format(new Date()));
 	}
 }
