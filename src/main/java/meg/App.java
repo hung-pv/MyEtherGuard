@@ -1,6 +1,7 @@
 package meg;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -52,6 +53,7 @@ public class App {
 	private static boolean holdon = false;
 
 	private static boolean debug;
+	private static boolean debugUsb;
 
 	private static AES256 aes256Cipher = null;
 	private static MegDevice megDevice = new MegDevice(null);
@@ -75,8 +77,11 @@ public class App {
 		if (larg.size() < 1)
 			return;
 		debug = larg.contains("debug");
+		debugUsb = larg.contains("debugUsb");
 		if (debug)
 			o("on DEBUG mode");
+		if (debugUsb)
+			o("on DEBUG USB mode");
 
 		findMegDevice();
 		if (!megDevice.isValid()) {
@@ -86,8 +91,9 @@ public class App {
 				o("Welcome back!");
 				o("Your Meg Device has not been plugged in or it contains some illegal file.");
 				o("Please make sure you've done correctly:");
-				o("1. Plug your Meg Device in and it was not broken");
-				o("2. That Meg Device is used only for storage it's files, no others");
+				o("1. Make sure it was not broken");
+				o("2. Plug your Meg Device in");
+				o("3. That Meg Device is used only for storage it's files, no others");
 				o("After checked, run me again");
 				System.exit(0);
 			}
@@ -865,13 +871,13 @@ public class App {
 		}
 		if (debug) {
 			if (SystemUtils.IS_OS_WINDOWS) {
-				megDevice = new MegDevice(new File("C:\\USB"));	
+				megDevice = new MegDevice(new File("C:\\USB"));
 			} else {
 				megDevice = new MegDevice(new File("/tmp/USB"));
 			}
 			return;
 		}
-		File[] roots = File.listRoots();
+		List<File> roots = getRoots();
 		Device: for (File root : roots) {
 			MegDevice drive = new MegDevice(root);
 			if (!drive.isValid()) {
@@ -917,7 +923,7 @@ public class App {
 		}
 		megDevice = new MegDevice(null);
 	}
-	
+
 	private static void createNewMegDevice() throws Exception {
 		o("Welcome, today is beautiful to see you :)");
 		o("How to setup:");
@@ -931,29 +937,23 @@ public class App {
 		o(" ... Press Enter to continue ...");
 		InputUtils.getRawInput(null);
 
-		List<File> fValidRoots = new ArrayList<>();
-		for (File root : File.listRoots()) {
-			if (root.listFiles().length == 0) {
-				fValidRoots.add(root);
-			}
-		}
-
+		List<File> fValidRoots = getRoots().stream().filter(r -> r.listFiles().length == 0).collect(Collectors.toList());
 		if (fValidRoots.isEmpty()) {
 			o("There is no USB device meet conditions, please check again");
 			o("Make sure it is completely EMPTY");
 			o("then run me again");
 			System.exit(0);
 		}
-		
+
 		while (true) {
-			for(int i = 0; i < fValidRoots.size(); i++) {
+			for (int i = 0; i < fValidRoots.size(); i++) {
 				File fValidRoot = fValidRoots.get(i);
-				o("\t%d. %s", i+1, fValidRoot.getAbsolutePath());
+				o("\t%d. %s", i + 1, fValidRoot.getAbsolutePath());
 			}
 			int selection;
 			while (true) {
 				selection = InputUtils.getInt("Select a device: ");
-				if (selection > fValidRoots.size()) {
+				if (selection < 1 || selection > fValidRoots.size()) {
 					o("Invalid selection");
 					continue;
 				}
@@ -966,7 +966,7 @@ public class App {
 				o("Select again !");
 				continue;
 			}
-			
+
 			megDevice = new MegDevice(selected);
 			FileUtils.write(megDevice.getIdFile(), "", StandardCharsets.UTF_8);
 			o("Setup done, from now on, your usb stick will be called as a 'Meg Device'");
@@ -1017,6 +1017,29 @@ public class App {
 			break;
 		}
 		return walletFiles.get(selection - 1);
+	}
+
+	private static List<File> getRoots() {
+		if (!debugUsb)
+			return Arrays.asList(File.listRoots());
+		List<File> roots = new ArrayList<>();
+		if (SystemUtils.IS_OS_WINDOWS) {
+			roots.add(new File("C:\\USB1"));
+			roots.add(new File("C:\\USB2"));
+		} else {
+			roots.add(new File("/tmp/USB1"));
+			roots.add(new File("/tmp/USB2"));
+		}
+		roots.forEach(f -> {
+			if (!f.exists()) {
+				try {
+					FileUtils.forceMkdir(f);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+		return roots;
 	}
 
 	private static final SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss dd/MM/yy");
