@@ -54,9 +54,9 @@ public class App {
 	private static boolean debug;
 
 	private static AES256 aes256Cipher = null;
+	private static Device device = new Device(null);
 
-	public static void main(String[] args) throws IllegalAccessException, IllegalArgumentException,
-			InvocationTargetException, NoSuchMethodException, SecurityException {
+	public static void main(String[] args) throws Exception {
 		initialize(args);
 		checkUSB();
 		ImageIO.setUseCache(false);
@@ -67,7 +67,7 @@ public class App {
 		}
 	}
 
-	private static void initialize(String[] args) {
+	private static void initialize(String[] args) throws Exception {
 		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 
 		List<String> larg = Arrays.asList(args).stream().map(a -> a.trim()).filter(a -> a.length() > 0)
@@ -77,12 +77,83 @@ public class App {
 		debug = larg.contains("debug");
 		if (debug)
 			o("on DEBUG mode");
+
+		findDevice();
+		if (!device.isValid()) {
+			if (InputUtils.confirm("Hi! Are you a NEW user?")) {
+				o("Welcome, today is beautiful to see you :)");
+				o("How to setup:");
+				o(" 1. Prepare a new USB device, format it, make sure it already cleared, no file remain");
+				o(" ... Press Enter to continue ...");
+				InputUtils.getRawInput(null);
+				o(" 2. Plug it in your computer");
+				o(" ... Press Enter to continue ...");
+				InputUtils.getRawInput(null);
+				o("Now I will list some devices that are detected from your computer");
+				o(" ... Press Enter to continue ...");
+				InputUtils.getRawInput(null);
+
+				List<File> fValidRoots = new ArrayList<>();
+				for (File root : File.listRoots()) {
+					if (root.listFiles().length == 0) {
+						fValidRoots.add(root);
+					}
+				}
+
+				if (fValidRoots.isEmpty()) {
+					o("There is no USB device meet conditions, please check again");
+					o("Make sure it is completely EMPTY");
+					o("then run me again");
+					System.exit(0);
+				}
+				
+				while (true) {
+
+					for(int i = 0; i < fValidRoots.size(); i++) {
+						File fValidRoot = fValidRoots.get(i);
+						o("\t%d. %s", i+1, fValidRoot.getAbsolutePath());
+					}
+					int selection;
+					while (true) {
+						selection = InputUtils.getInt("Select a device: ");
+						if (selection > fValidRoots.size()) {
+							o("Invalid selection");
+							continue;
+						}
+						break;
+					}
+
+					File selected = fValidRoots.get(selection - 1);
+					if (!InputUtils.confirm(//
+							String.format("Are you sure to select '%s' ?", selected.getAbsolutePath()))) {
+						o("Select again !");
+						continue;
+					}
+					
+					device = new Device(selected);
+					FileUtils.write(device.getIdFile(), "", StandardCharsets.UTF_8);
+					o("Setup done, now you can start by pressing Enter");
+					InputUtils.getRawInput(null);
+					break;
+				}
+
+			} else {
+				o("Welcome back!");
+				o("Your USB device has not been plugged in or it contains some illegal file.");
+				o("Please make sure you've done correctly:");
+				o("1. Plug your USB device in and it was not broken");
+				o("2. That USB device is used only for storage it's files, no others");
+				o("After checked, run me again");
+				System.exit(0);
+			}
+		}
 	}
 
 	private static void start() throws Exception {
 		while (holdon) {
 			Thread.sleep(50);
 		}
+		checkUSB();
 		checkTimedOut();
 		MenuManager mm = new MenuManager();
 		if (!KeystoreManager.isKeystoreFileExists()) {
@@ -159,8 +230,8 @@ public class App {
 	private static void exit() throws Exception {
 		try {
 			if (SystemUtils.IS_OS_WINDOWS) {
-				String[] cls = new String[] {"cmd.exe", "/c", "cls"};
-				Runtime.getRuntime().exec(cls); 
+				String[] cls = new String[] { "cmd.exe", "/c", "cls" };
+				Runtime.getRuntime().exec(cls);
 			} else if (SystemUtils.IS_OS_LINUX) {
 				Runtime.getRuntime().exec("clear");
 			} else {
@@ -197,14 +268,13 @@ public class App {
 	// Menu
 	@SuppressWarnings("unused")
 	private static void generateKeyStore() throws Exception {
-		USB usb = getUSB();
-		File fUsbId = usb.getUsbIdFile();
-		if (!debug && fUsbId.exists() && FileUtils.readFileToByteArray(fUsbId).length > 0) {
+		File fDeviceId = device.getIdFile();
+		if (!debug && fDeviceId.exists() && FileUtils.readFileToByteArray(fDeviceId).length > 0) {
 			o("WARNING! Your USB '%s' were used by another keystore before, restoring keystore may results losting encrypted data FOREVER",
-					usb.getAbsolutePath());
+					device.getAbsolutePath());
 			o("In order to generate new keystore you need to perform following actions:");
-			o(" 1. Delete '%s' file located in USB", fUsbId.getName());
-			o(" 2. Create a new '%s' file in your USB, but leave it empty", fUsbId.getName());
+			o(" 1. Delete '%s' file located in USB", fDeviceId.getName());
+			o(" 2. Create a new '%s' file in your USB, but leave it empty", fDeviceId.getName());
 			return;
 		}
 
@@ -266,7 +336,6 @@ public class App {
 
 	@SuppressWarnings("unused")
 	private static void restoreKeyStore() throws Exception {
-		USB usb = getUSB();
 		o("Enter seed words:");
 		String mnemonic;
 		boolean first = true;
@@ -292,7 +361,7 @@ public class App {
 		int cacheSeedWordsLength = 0;
 
 		try {
-			usbIdContentBuffer = FileUtils.readFileToByteArray(usb.getUsbIdFile());
+			usbIdContentBuffer = FileUtils.readFileToByteArray(device.getIdFile());
 			if (usbIdContentBuffer.length > 1) {
 				cacheSeedWordsLength = usbIdContentBuffer[0];
 				usbIdContent = new byte[usbIdContentBuffer.length - 1];
@@ -334,7 +403,7 @@ public class App {
 			byte[] buffer = new byte[content.length + 1];
 			System.arraycopy(content, 0, buffer, 1, content.length);
 			buffer[0] = (byte) mnemonic.split("\\s").length;
-			FileUtils.writeByteArrayToFile(getUSB().getUsbIdFile(), buffer);
+			FileUtils.writeByteArrayToFile(device.getIdFile(), buffer);
 		} catch (Exception e) {
 		}
 	}
@@ -412,7 +481,7 @@ public class App {
 
 		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted,
 				mnemonicWithAES256Encrypted, noteWithAES256Encrypted);
-		File file = getUSB().getFileInUsb(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
+		File file = device.getFile(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
 		try {
 			UniqueFileUtils.write(file, wi.toRaw());
 		} catch (FileExistsException e) {
@@ -428,8 +497,7 @@ public class App {
 
 	@SuppressWarnings("unused")
 	private static void getWalletPrivateKey() throws Exception {
-		USB usb = getUSB();
-		File[] files = usb.getFilesInUsb();
+		File[] files = device.getFiles();
 		if (files == null || files.length == 0) {
 			o("No wallet existing in device");
 			return;
@@ -553,7 +621,7 @@ public class App {
 		String receiveAddress;
 		byte[] bNonce, bGasPrice, bGasLimit, bReceiveAddress, bValue, bData;
 		Integer chainId;
-		
+
 		o("\n");
 
 		String tmp;
@@ -726,7 +794,7 @@ public class App {
 		ClipboardUtils.clear();
 
 		F2aInfo f2aInfo = new F2aInfo(encrypted2fa, account, productionName, encryptedRemarks);
-		File file = getUSB().getFileInUsb(f2aInfo.getFileName());
+		File file = device.getFile(f2aInfo.getFileName());
 		try {
 			UniqueFileUtils.write(file, f2aInfo.toRaw());
 		} catch (FileExistsException e) {
@@ -758,7 +826,7 @@ public class App {
 
 	@SuppressWarnings("unused")
 	private static void get2fa() throws Exception {
-		List<File> files = Arrays.asList(getUSB().getFilesInUsb()).stream()
+		List<File> files = Arrays.asList(device.getFiles()).stream()
 				.filter(f -> f.getName().endsWith("." + FILE_2FA_EXT)).collect(Collectors.toList());
 		if (files.isEmpty()) {
 			o("Empty !!!");
@@ -806,7 +874,7 @@ public class App {
 			o("Remark:\n%s", remark);
 		}
 
-		ClipboardUtils.setText(_2faPrivateKey, "2fa private key");
+		// No need ClipboardUtils.setText(_2faPrivateKey, "2fa private key");
 
 		askContinueOrExit(null);
 	}
@@ -830,53 +898,62 @@ public class App {
 		return bytes;
 	}
 
+	private static boolean isFileExt(File file, String ext) {
+		if (file == null || ext == null) {
+			return false;
+		}
+		return file.getName().toLowerCase().endsWith("." + ext.toLowerCase());
+	}
+
 	// OS and USB
 	private static void checkUSB() {
-		USB usb = getUSB();
-		if (!usb.isValid()) {
-			o("USB not found !!!");
-			o("You may need a USB plugged in with an empty file named '%s' inside it", USB.USB_ID_FILE_NAME);
+		if (!device.isValid()) {
+			o("USB had been disconnected!");
 			System.exit(1);
 		}
 	}
 
-	private static USB _usb = new USB(null);
-
-	private static USB getUSB() {
+	private static void findDevice() {
 		if (!SystemUtils.IS_OS_WINDOWS) {
 			throw new RuntimeException(
 					"Method of detecting USB device in OS " + System.getProperty("os.name") + " was not implemented");
 		}
 		if (debug) {
-			_usb = new USB(new File("C:\\USB"));
-		}
-		if (_usb.isValid()) {
-			return _usb;
+			device = new Device(new File("C:\\USB"));
+			return;
 		}
 		File[] roots = File.listRoots();
 		Device: for (File root : roots) {
-			USB usb = new USB(root);
-			if (!usb.isValid()) {
+			Device drive = new Device(root);
+			if (!drive.isValid()) {
 				continue Device;
 			}
 			try {
 				File[] listOfFiles = root.listFiles();
 				FileOnDevice: for (File file : listOfFiles) {
 					if (file.isDirectory()) {
-						o("Usb %s should not contains any directory. Skip this device", root.getAbsolutePath());
+						o("Device %s should not contains any directory. Skip this device", root.getAbsolutePath());
 						continue Device;
 					} else { // File
-						if (file.getName().equalsIgnoreCase(usb.getUsbIdFile().getName())) {
+						if (file.getName().equalsIgnoreCase(drive.getIdFile().getName())) {
 							continue FileOnDevice;
-						} else if (file.getName().toLowerCase().endsWith(FILE_IMG_EXT.toLowerCase())) {
+						} else if (isFileExt(file, FILE_IMG_EXT) //
+								|| isFileExt(file, FILE_WALLET_EXT) //
+								|| isFileExt(file, FILE_2FA_EXT) //
+								|| isFileExt(file, "cmd") //
+								|| isFileExt(file, "sh") //
+								|| isFileExt(file, "jar")) {
 							continue FileOnDevice;
-						} else if (file.getName().toLowerCase().endsWith(FILE_WALLET_EXT.toLowerCase())) {
-							continue FileOnDevice;
-						} else if (file.getName().toLowerCase().endsWith(FILE_2FA_EXT.toLowerCase())) {
+						} else if (file.getName().equalsIgnoreCase(KeystoreManager.getKeystoreFile().getName())) {
+							o("WARNING: Found keystore file '%s' on your USB device",
+									KeystoreManager.getKeystoreFile().getName());
+							o("You should NOT save it here");
+							o("Push it to cloud storage service like Google Drive, Drop Box, Mediafire,...");
+							o("When need that file, download and save it to your local computer");
 							continue FileOnDevice;
 						} else {
-							o("Usb %s should not contains any file except *.%s and *.%s files. Skip this device",
-									root.getAbsolutePath(), FILE_IMG_EXT, FILE_WALLET_EXT);
+							o("Device %s should not contains any file except *.%s, *.%s and *.%s files. This device will be SKIPPED",
+									root.getAbsolutePath(), FILE_IMG_EXT, FILE_WALLET_EXT, FILE_2FA_EXT);
 							continue Device;
 						}
 					}
@@ -885,14 +962,14 @@ public class App {
 				e.printStackTrace();
 				continue Device;
 			}
-			return _usb = new USB(root);
+			device = new Device(root);
+			return;
 		}
-		return _usb = new USB(null);
+		device = new Device(null);
 	}
 
 	private static File selectWallet(WalletType wt) {
-		USB usb = getUSB();
-		List<File> walletFiles = Arrays.asList(usb.getFilesInUsb()).stream()//
+		List<File> walletFiles = Arrays.asList(device.getFiles()).stream()//
 				.filter(f -> f.getName().endsWith("." + FILE_WALLET_EXT)).collect(Collectors.toList());
 		if (walletFiles.isEmpty()) {
 			o("No wallet exists in device");
