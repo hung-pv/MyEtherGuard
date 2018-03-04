@@ -54,11 +54,11 @@ public class App {
 	private static boolean debug;
 
 	private static AES256 aes256Cipher = null;
-	private static Device device = new Device(null);
+	private static MegDevice megDevice = new MegDevice(null);
 
 	public static void main(String[] args) throws Exception {
 		initialize(args);
-		checkUSB();
+		checkMegDevice();
 		ImageIO.setUseCache(false);
 		try {
 			start();
@@ -78,71 +78,16 @@ public class App {
 		if (debug)
 			o("on DEBUG mode");
 
-		findDevice();
-		if (!device.isValid()) {
+		findMegDevice();
+		if (!megDevice.isValid()) {
 			if (InputUtils.confirm("Hi! Are you a NEW user?")) {
-				o("Welcome, today is beautiful to see you :)");
-				o("How to setup:");
-				o(" 1. Prepare a new USB device, format it, make sure it already cleared, no file remain");
-				o(" ... Press Enter to continue ...");
-				InputUtils.getRawInput(null);
-				o(" 2. Plug it in your computer");
-				o(" ... Press Enter to continue ...");
-				InputUtils.getRawInput(null);
-				o("Now I will list some devices that are detected from your computer");
-				o(" ... Press Enter to continue ...");
-				InputUtils.getRawInput(null);
-
-				List<File> fValidRoots = new ArrayList<>();
-				for (File root : File.listRoots()) {
-					if (root.listFiles().length == 0) {
-						fValidRoots.add(root);
-					}
-				}
-
-				if (fValidRoots.isEmpty()) {
-					o("There is no USB device meet conditions, please check again");
-					o("Make sure it is completely EMPTY");
-					o("then run me again");
-					System.exit(0);
-				}
-				
-				while (true) {
-
-					for(int i = 0; i < fValidRoots.size(); i++) {
-						File fValidRoot = fValidRoots.get(i);
-						o("\t%d. %s", i+1, fValidRoot.getAbsolutePath());
-					}
-					int selection;
-					while (true) {
-						selection = InputUtils.getInt("Select a device: ");
-						if (selection > fValidRoots.size()) {
-							o("Invalid selection");
-							continue;
-						}
-						break;
-					}
-
-					File selected = fValidRoots.get(selection - 1);
-					if (!InputUtils.confirm(//
-							String.format("Are you sure to select '%s' ?", selected.getAbsolutePath()))) {
-						o("Select again !");
-						continue;
-					}
-					
-					device = new Device(selected);
-					FileUtils.write(device.getIdFile(), "", StandardCharsets.UTF_8);
-					o("Setup done, now you can start by pressing Enter");
-					InputUtils.getRawInput(null);
-					break;
-				}
-
+				createNewMegDevice();
 			} else {
 				o("Welcome back!");
-				o("Your USB device has not been plugged in or it contains some illegal file.");
+				o("Your Meg Device has not been plugged in or it contains some illegal file.");
 				o("Please make sure you've done correctly:");
-				o("1. Plug your USB device in and it was not broken");
-				o("2. That USB device is used only for storage it's files, no others");
+				o("1. Plug your Meg Device in and it was not broken");
+				o("2. That Meg Device is used only for storage it's files, no others");
 				o("After checked, run me again");
 				System.exit(0);
 			}
@@ -153,7 +98,7 @@ public class App {
 		while (holdon) {
 			Thread.sleep(50);
 		}
-		checkUSB();
+		checkMegDevice();
 		checkTimedOut();
 		MenuManager mm = new MenuManager();
 		if (!KeystoreManager.isKeystoreFileExists()) {
@@ -268,10 +213,10 @@ public class App {
 	// Menu
 	@SuppressWarnings("unused")
 	private static void generateKeyStore() throws Exception {
-		File fDeviceId = device.getIdFile();
+		File fDeviceId = megDevice.getIdFile();
 		if (!debug && fDeviceId.exists() && FileUtils.readFileToByteArray(fDeviceId).length > 0) {
 			o("WARNING! Your USB '%s' were used by another keystore before, restoring keystore may results losting encrypted data FOREVER",
-					device.getAbsolutePath());
+					megDevice.getAbsolutePath());
 			o("In order to generate new keystore you need to perform following actions:");
 			o(" 1. Delete '%s' file located in USB", fDeviceId.getName());
 			o(" 2. Create a new '%s' file in your USB, but leave it empty", fDeviceId.getName());
@@ -361,7 +306,7 @@ public class App {
 		int cacheSeedWordsLength = 0;
 
 		try {
-			usbIdContentBuffer = FileUtils.readFileToByteArray(device.getIdFile());
+			usbIdContentBuffer = FileUtils.readFileToByteArray(megDevice.getIdFile());
 			if (usbIdContentBuffer.length > 1) {
 				cacheSeedWordsLength = usbIdContentBuffer[0];
 				usbIdContent = new byte[usbIdContentBuffer.length - 1];
@@ -403,7 +348,7 @@ public class App {
 			byte[] buffer = new byte[content.length + 1];
 			System.arraycopy(content, 0, buffer, 1, content.length);
 			buffer[0] = (byte) mnemonic.split("\\s").length;
-			FileUtils.writeByteArrayToFile(device.getIdFile(), buffer);
+			FileUtils.writeByteArrayToFile(megDevice.getIdFile(), buffer);
 		} catch (Exception e) {
 		}
 	}
@@ -481,11 +426,11 @@ public class App {
 
 		WalletInfo wi = new WalletInfo(wt.getDisplayText(), address, privateKeyWithAES256Encrypted,
 				mnemonicWithAES256Encrypted, noteWithAES256Encrypted);
-		File file = device.getFile(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
+		File file = megDevice.getFile(String.format("%s.%s.%s", address, wt.name(), FILE_WALLET_EXT));
 		try {
 			UniqueFileUtils.write(file, wi.toRaw());
 		} catch (FileExistsException e) {
-			o("** This wallet is already exists in your device, named '%s'", file.getName());
+			o("** This wallet is already exists in your Meg device, named '%s'", file.getName());
 			o(">> Aborted");
 			return;
 		}
@@ -497,9 +442,9 @@ public class App {
 
 	@SuppressWarnings("unused")
 	private static void getWalletPrivateKey() throws Exception {
-		File[] files = device.getFiles();
+		File[] files = megDevice.getFiles();
 		if (files == null || files.length == 0) {
-			o("No wallet existing in device");
+			o("No wallet existing in Meg Device");
 			return;
 		}
 		MenuManager mm = new MenuManager();
@@ -514,7 +459,7 @@ public class App {
 			}
 		}
 		if (wallets.isEmpty()) {
-			o("No wallet existing in device");
+			o("No wallet existing in Meg device");
 			return;
 		}
 		mm.showOptionList("Select a wallet:");
@@ -794,11 +739,11 @@ public class App {
 		ClipboardUtils.clear();
 
 		F2aInfo f2aInfo = new F2aInfo(encrypted2fa, account, productionName, encryptedRemarks);
-		File file = device.getFile(f2aInfo.getFileName());
+		File file = megDevice.getFile(f2aInfo.getFileName());
 		try {
 			UniqueFileUtils.write(file, f2aInfo.toRaw());
 		} catch (FileExistsException e) {
-			o("** This account/website or production is already exists in your device, named '%s'", file.getName());
+			o("** This account/website or production is already exists in your Meg device, named '%s'", file.getName());
 			o(">> if you want to override, the old data will be lost forever ! Please becareful");
 			if (!InputUtils.confirm("Do you understand?")) {
 				o(">> Aborted");
@@ -826,7 +771,7 @@ public class App {
 
 	@SuppressWarnings("unused")
 	private static void get2fa() throws Exception {
-		List<File> files = Arrays.asList(device.getFiles()).stream()
+		List<File> files = Arrays.asList(megDevice.getFiles()).stream()
 				.filter(f -> f.getName().endsWith("." + FILE_2FA_EXT)).collect(Collectors.toList());
 		if (files.isEmpty()) {
 			o("Empty !!!");
@@ -905,26 +850,30 @@ public class App {
 		return file.getName().toLowerCase().endsWith("." + ext.toLowerCase());
 	}
 
-	// OS and USB
-	private static void checkUSB() {
-		if (!device.isValid()) {
-			o("USB had been disconnected!");
+	// OS and Meg Device
+	private static void checkMegDevice() {
+		if (!megDevice.isValid()) {
+			o("Meg Device has been disconnected!");
 			System.exit(1);
 		}
 	}
 
-	private static void findDevice() {
+	private static void findMegDevice() {
 		if (!SystemUtils.IS_OS_WINDOWS) {
 			throw new RuntimeException(
-					"Method of detecting USB device in OS " + System.getProperty("os.name") + " was not implemented");
+					"Method of detecting Meg device in OS " + System.getProperty("os.name") + " was not implemented");
 		}
 		if (debug) {
-			device = new Device(new File("C:\\USB"));
+			if (SystemUtils.IS_OS_WINDOWS) {
+				megDevice = new MegDevice(new File("C:\\USB"));	
+			} else {
+				megDevice = new MegDevice(new File("/tmp/USB"));
+			}
 			return;
 		}
 		File[] roots = File.listRoots();
 		Device: for (File root : roots) {
-			Device drive = new Device(root);
+			MegDevice drive = new MegDevice(root);
 			if (!drive.isValid()) {
 				continue Device;
 			}
@@ -932,7 +881,8 @@ public class App {
 				File[] listOfFiles = root.listFiles();
 				FileOnDevice: for (File file : listOfFiles) {
 					if (file.isDirectory()) {
-						o("Device %s should not contains any directory. Skip this device", root.getAbsolutePath());
+						o("Meg Device %s should not contains any directory", root.getAbsolutePath());
+						o("SKIP this device");
 						continue Device;
 					} else { // File
 						if (file.getName().equalsIgnoreCase(drive.getIdFile().getName())) {
@@ -945,14 +895,14 @@ public class App {
 								|| isFileExt(file, "jar")) {
 							continue FileOnDevice;
 						} else if (file.getName().equalsIgnoreCase(KeystoreManager.getKeystoreFile().getName())) {
-							o("WARNING: Found keystore file '%s' on your USB device",
+							o("WARNING: Found keystore file '%s' on your Meg device",
 									KeystoreManager.getKeystoreFile().getName());
 							o("You should NOT save it here");
 							o("Push it to cloud storage service like Google Drive, Drop Box, Mediafire,...");
 							o("When need that file, download and save it to your local computer");
 							continue FileOnDevice;
 						} else {
-							o("Device %s should not contains any file except *.%s, *.%s and *.%s files. This device will be SKIPPED",
+							o("Meg device '%s' should not contains any file except *.%s, *.%s and *.%s files. This device will be SKIPPED",
 									root.getAbsolutePath(), FILE_IMG_EXT, FILE_WALLET_EXT, FILE_2FA_EXT);
 							continue Device;
 						}
@@ -962,17 +912,76 @@ public class App {
 				e.printStackTrace();
 				continue Device;
 			}
-			device = new Device(root);
+			megDevice = new MegDevice(root);
 			return;
 		}
-		device = new Device(null);
+		megDevice = new MegDevice(null);
+	}
+	
+	private static void createNewMegDevice() throws Exception {
+		o("Welcome, today is beautiful to see you :)");
+		o("How to setup:");
+		o(" 1. Prepare a new USB, format it, make sure it already cleared, no file remain");
+		o(" ... Press Enter to continue ...");
+		InputUtils.getRawInput(null);
+		o(" 2. Plug it in your computer");
+		o(" ... Press Enter to continue ...");
+		InputUtils.getRawInput(null);
+		o("Now I will list some devices that are detected from your computer");
+		o(" ... Press Enter to continue ...");
+		InputUtils.getRawInput(null);
+
+		List<File> fValidRoots = new ArrayList<>();
+		for (File root : File.listRoots()) {
+			if (root.listFiles().length == 0) {
+				fValidRoots.add(root);
+			}
+		}
+
+		if (fValidRoots.isEmpty()) {
+			o("There is no USB device meet conditions, please check again");
+			o("Make sure it is completely EMPTY");
+			o("then run me again");
+			System.exit(0);
+		}
+		
+		while (true) {
+			for(int i = 0; i < fValidRoots.size(); i++) {
+				File fValidRoot = fValidRoots.get(i);
+				o("\t%d. %s", i+1, fValidRoot.getAbsolutePath());
+			}
+			int selection;
+			while (true) {
+				selection = InputUtils.getInt("Select a device: ");
+				if (selection > fValidRoots.size()) {
+					o("Invalid selection");
+					continue;
+				}
+				break;
+			}
+
+			File selected = fValidRoots.get(selection - 1);
+			if (!InputUtils.confirm(//
+					String.format("Are you sure to select '%s' ?", selected.getAbsolutePath()))) {
+				o("Select again !");
+				continue;
+			}
+			
+			megDevice = new MegDevice(selected);
+			FileUtils.write(megDevice.getIdFile(), "", StandardCharsets.UTF_8);
+			o("Setup done, from now on, your usb stick will be called as a 'Meg Device'");
+			o("Meg Device is a short name of MyEtherGuard device");
+			o("Now you can start by pressing Enter");
+			InputUtils.getRawInput(null);
+			break;
+		}
 	}
 
 	private static File selectWallet(WalletType wt) {
-		List<File> walletFiles = Arrays.asList(device.getFiles()).stream()//
+		List<File> walletFiles = Arrays.asList(megDevice.getFiles()).stream()//
 				.filter(f -> f.getName().endsWith("." + FILE_WALLET_EXT)).collect(Collectors.toList());
 		if (walletFiles.isEmpty()) {
-			o("No wallet exists in device");
+			o("No wallet exists in Meg device");
 			return null;
 		}
 
@@ -980,7 +989,7 @@ public class App {
 				.filter(f -> f.getName().toLowerCase().contains("." + wt.name().toLowerCase() + "."))
 				.collect(Collectors.toList());
 		if (walletFiles.isEmpty()) {
-			o("No wallet of type %s exists in device", wt.getDisplayText());
+			o("No wallet of type %s exists in Meg device", wt.getDisplayText());
 			return null;
 		}
 
